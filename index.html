@@ -1,43 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>NSE Smart Market Dashboard</title>
 
     <meta
         name="description"
-        content="NSE Smart Market Dashboard - Market Intelligence, Technical Analysis, Fundamentals and Trading Setups"
+        content="NSE Smart Market Dashboard - Market Intelligence, Technical Analysis, Fundamentals, Setups and Portfolio Builder"
     >
 
-    <meta
-        name="author"
-        content="Rakesh Nagapuri"
-    >
+    <link rel="stylesheet" href="assets/dashboard.css">
 
-    <title>
-        NSE Smart Market Dashboard V2.1
-    </title>
-
-    <link
-        rel="stylesheet"
-        href="assets/dashboard.css"
-    >
-
+    <!-- Excel export support -->
+    <script
+        src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js">
+    </script>
 </head>
-
 
 <body>
 
-
-<!-- ============================================================
+<!-- =========================================================
      HEADER
-     ============================================================ -->
+========================================================= -->
 
 <header class="dashboard-header">
 
@@ -46,34 +33,34 @@
         <div class="brand-block">
 
             <div class="brand-title">
-                NSE SMART
-                <span>MARKET DASHBOARD</span>
+                NSE SMART <span>MARKET DASHBOARD</span>
             </div>
 
             <div class="brand-subtitle">
-                Market Intelligence • Technicals • Fundamentals • Setups
+                Market Intelligence
+                <span>•</span>
+                Technicals
+                <span>•</span>
+                Fundamentals
+                <span>•</span>
+                Decision Support
             </div>
 
         </div>
 
-
         <div class="header-meta">
 
-            <div class="live-indicator">
+            <div class="market-status">
                 <span class="live-dot"></span>
-                MARKET DATA
+                <span id="marketStatusText">MARKET DATA</span>
             </div>
 
-            <div
-                id="lastUpdated"
-                class="last-updated"
-            >
+            <div id="lastUpdated" class="last-updated">
                 Loading data...
             </div>
 
             <div class="created-by">
-                Created by
-                <strong>Rakesh Nagapuri</strong>
+                Created by <strong>Rakesh Nagapuri</strong>
             </div>
 
         </div>
@@ -83,36 +70,32 @@
 </header>
 
 
-
-<!-- ============================================================
+<!-- =========================================================
      MAIN CONTAINER
-     ============================================================ -->
+========================================================= -->
 
 <main class="dashboard-container">
 
 
-<!-- ============================================================
+<!-- =========================================================
      MARKET REGIME
-     ============================================================ -->
+========================================================= -->
 
-<section
-    class="dashboard-section market-section"
-    id="marketSection"
->
+<section id="marketSection" class="dashboard-section market-section">
 
     <div class="section-title-row">
 
         <div>
 
             <div class="section-kicker">
-                Market Context
+                MARKET CONTEXT
             </div>
 
-            <h2>
+            <h1 class="section-title">
                 Market Regime
-            </h2>
+            </h1>
 
-            <p>
+            <p class="section-description">
                 Understand the market environment before selecting stocks.
             </p>
 
@@ -121,194 +104,138 @@
     </div>
 
 
-    <div
-        id="marketRegime"
-        class="market-regime-main"
-    >
+    <!-- Main regime -->
 
-        <div>
+    <div id="marketRegime" class="market-regime-main">
 
-            <div
-                id="marketRegimeBadge"
-                class="regime-badge regime-neutral"
-            >
-                Loading
-            </div>
-
-            <div
-                id="marketRegimeText"
-                class="regime-score"
-            >
-                Analysing market conditions...
-            </div>
-
-        </div>
-
-
-        <div
-            id="marketScore"
-            class="regime-score"
-        >
-            Market Score:
-            <strong>--</strong>
+        <div class="loading-state">
+            Analysing market conditions...
         </div>
 
     </div>
 
 
+    <!-- Market indices -->
 
-    <!-- ========================================================
-         MARKET INDEX CARDS
-         ======================================================== -->
+    <div class="market-index-grid">
 
-    <div
-        id="marketIndexGrid"
-        class="market-index-grid"
-    >
 
-        <div class="market-index-card">
+        <!-- NIFTY -->
 
-            <h4>
-                NIFTY 50
-            </h4>
+        <div class="market-index-card nifty-card">
 
-            <div
-                id="niftyPrice"
-                class="index-price"
-            >
+            <div class="index-card-header">
+                <span>NIFTY 50</span>
+            </div>
+
+            <div id="niftyPrice" class="index-price">
                 --
             </div>
 
             <div class="index-price-label">
-                Last Completed Close
+                LAST CLOSE
             </div>
 
-            <div
-                id="niftySecondary"
-                class="index-secondary"
-            >
+            <div id="niftySecondary" class="index-secondary">
                 --
             </div>
 
-            <div
-                id="niftyMeta"
-                class="index-meta"
-            >
+            <div id="niftyMeta" class="index-meta">
+                <div>
+                    <span>Trend</span>
+                    <strong id="niftyTrend">--</strong>
+                </div>
 
-                <span>
-                    Trend
-                    <strong>--</strong>
-                </span>
+                <div>
+                    <span>Momentum</span>
+                    <strong id="niftyMomentum">--</strong>
+                </div>
 
-                <span>
-                    Momentum
-                    <strong>--</strong>
-                </span>
-
-                <span>
-                    RSI
-                    <strong>--</strong>
-                </span>
-
+                <div>
+                    <span>RSI</span>
+                    <strong id="niftyRSI">--</strong>
+                </div>
             </div>
 
         </div>
 
 
+        <!-- BANK NIFTY -->
 
-        <div class="market-index-card">
+        <div class="market-index-card bank-card">
 
-            <h4>
-                BANK NIFTY
-            </h4>
+            <div class="index-card-header">
+                <span>BANK NIFTY</span>
+            </div>
 
-            <div
-                id="bankNiftyPrice"
-                class="index-price"
-            >
+            <div id="bankNiftyPrice" class="index-price">
                 --
             </div>
 
             <div class="index-price-label">
-                Last Completed Close
+                LAST CLOSE
             </div>
 
-            <div
-                id="bankNiftySecondary"
-                class="index-secondary"
-            >
+            <div id="bankNiftySecondary" class="index-secondary">
                 --
             </div>
 
-            <div
-                id="bankNiftyMeta"
-                class="index-meta"
-            >
+            <div id="bankNiftyMeta" class="index-meta">
+                <div>
+                    <span>Trend</span>
+                    <strong id="bankNiftyTrend">--</strong>
+                </div>
 
-                <span>
-                    Trend
-                    <strong>--</strong>
-                </span>
+                <div>
+                    <span>Momentum</span>
+                    <strong id="bankNiftyMomentum">--</strong>
+                </div>
 
-                <span>
-                    Momentum
-                    <strong>--</strong>
-                </span>
-
-                <span>
-                    RSI
-                    <strong>--</strong>
-                </span>
-
+                <div>
+                    <span>RSI</span>
+                    <strong id="bankNiftyRSI">--</strong>
+                </div>
             </div>
 
         </div>
 
 
+        <!-- VIX -->
 
-        <div class="market-index-card">
+        <div class="market-index-card vix-card">
 
-            <h4>
-                INDIA VIX
-            </h4>
+            <div class="index-card-header">
+                <span>INDIA VIX</span>
+            </div>
 
-            <div
-                id="vixValue"
-                class="index-price"
-            >
+            <div id="vixValue" class="index-price">
                 --
             </div>
 
             <div class="index-price-label">
-                Volatility Indicator
+                VOLATILITY INDICATOR
             </div>
 
-            <div
-                id="vixInterpretation"
-                class="index-secondary"
-            >
+            <div id="vixInterpretation" class="index-secondary">
                 --
             </div>
 
-            <div
-                id="vixMeta"
-                class="index-meta"
-            >
+            <div id="vixMeta" class="index-meta">
 
-                <span>
-                    Market
-                    <strong>--</strong>
-                </span>
+                <div>
+                    <span>Market</span>
+                    <strong id="vixMarket">--</strong>
+                </div>
 
-                <span>
-                    Risk
-                    <strong>--</strong>
-                </span>
+                <div>
+                    <span>Risk</span>
+                    <strong id="vixRisk">--</strong>
+                </div>
 
-                <span>
-                    Mode
-                    <strong>--</strong>
-                </span>
+                <div>
+                    <span>Mode</span>
+                    <strong id="vixMode">--</strong>
+                </div>
 
             </div>
 
@@ -317,10 +244,7 @@
     </div>
 
 
-
-    <!-- ========================================================
-         ENVIRONMENT
-         ======================================================== -->
+    <!-- Trading environment -->
 
     <div
         id="marketEnvironmentGrid"
@@ -328,89 +252,52 @@
     >
 
         <div class="environment-card">
-
-            <div class="environment-title">
-                Equity
-            </div>
-
-            <strong>
-                --
-            </strong>
-
+            <span>Equity</span>
+            <strong>--</strong>
         </div>
 
-
         <div class="environment-card">
-
-            <div class="environment-title">
-                Swing
-            </div>
-
-            <strong>
-                --
-            </strong>
-
+            <span>Swing</span>
+            <strong>--</strong>
         </div>
 
-
         <div class="environment-card">
-
-            <div class="environment-title">
-                Breakout
-            </div>
-
-            <strong>
-                --
-            </strong>
-
+            <span>Breakout</span>
+            <strong>--</strong>
         </div>
 
-
         <div class="environment-card">
-
-            <div class="environment-title">
-                Intraday
-            </div>
-
-            <strong>
-                --
-            </strong>
-
+            <span>Intraday</span>
+            <strong>--</strong>
         </div>
 
-
         <div class="environment-card">
-
-            <div class="environment-title">
-                Options
-            </div>
-
-            <strong>
-                --
-            </strong>
-
+            <span>Options</span>
+            <strong>--</strong>
         </div>
 
     </div>
 
 
+    <!-- Market analysis -->
 
-    <!-- ========================================================
-         MARKET ANALYSIS
-         ======================================================== -->
+    <div class="market-analysis-panel">
 
-    <div
-        id="marketAnalysis"
-        class="market-analysis-panel"
-    >
+        <div class="section-heading-row">
 
-        <div class="section-heading">
+            <div>
 
-            <h3>
-                Next-Day Market Analysis
-            </h3>
+                <div class="section-kicker">
+                    DECISION SUPPORT
+                </div>
 
-            <span>
+                <h2 class="section-heading">
+                    Next-Day Market Analysis
+                </h2>
+
+            </div>
+
+            <span class="analysis-label">
                 Structure-based scenario
             </span>
 
@@ -423,67 +310,28 @@
         >
 
             <div class="analysis-metric">
-
-                <span>
-                    Pivot
-                </span>
-
-                <strong>
-                    --
-                </strong>
-
+                <span>Support</span>
+                <strong id="marketSupport">--</strong>
             </div>
 
-
             <div class="analysis-metric">
-
-                <span>
-                    Support
-                </span>
-
-                <strong>
-                    --
-                </strong>
-
+                <span>Resistance</span>
+                <strong id="marketResistance">--</strong>
             </div>
 
-
             <div class="analysis-metric">
-
-                <span>
-                    Resistance
-                </span>
-
-                <strong>
-                    --
-                </strong>
-
+                <span>Pivot</span>
+                <strong id="marketPivot">--</strong>
             </div>
 
-
             <div class="analysis-metric">
-
-                <span>
-                    Bullish Trigger
-                </span>
-
-                <strong>
-                    --
-                </strong>
-
+                <span>Bullish Trigger</span>
+                <strong id="bullishTrigger">--</strong>
             </div>
 
-
             <div class="analysis-metric">
-
-                <span>
-                    Bearish Trigger
-                </span>
-
-                <strong>
-                    --
-                </strong>
-
+                <span>Bearish Trigger</span>
+                <strong id="bearishTrigger">--</strong>
             </div>
 
         </div>
@@ -493,15 +341,7 @@
             id="marketScenario"
             class="market-scenario"
         >
-
-            <strong>
-                Scenario
-            </strong>
-
-            <p>
-                Market scenario will appear after the latest analysis is loaded.
-            </p>
-
+            Market analysis will appear here after data loads.
         </div>
 
     </div>
@@ -509,14 +349,13 @@
 </section>
 
 
-
-<!-- ============================================================
+<!-- =========================================================
      MARKET BREADTH
-     ============================================================ -->
+========================================================= -->
 
 <section
-    class="dashboard-section breadth-section"
     id="breadthSection"
+    class="dashboard-section breadth-section"
 >
 
     <div class="section-title-row">
@@ -524,15 +363,15 @@
         <div>
 
             <div class="section-kicker">
-                Market Participation
+                MARKET PARTICIPATION
             </div>
 
-            <h2>
+            <h2 class="section-title">
                 Market Breadth
             </h2>
 
-            <p>
-                Measure how broadly the market is participating in the current trend.
+            <p class="section-description">
+                Understand how broadly the market is participating in the current trend.
             </p>
 
         </div>
@@ -540,7 +379,10 @@
     </div>
 
 
-    <div id="breadthCards">
+    <div
+        id="breadthCards"
+        class="breadth-cards"
+    >
 
         <div class="loading-state">
             Loading breadth...
@@ -551,14 +393,13 @@
 </section>
 
 
-
-<!-- ============================================================
-     SECTOR ANALYSIS
-     ============================================================ -->
+<!-- =========================================================
+     SETUP SUMMARY
+========================================================= -->
 
 <section
-    class="dashboard-section sector-section"
-    id="sectorSection"
+    id="setupSummarySection"
+    class="dashboard-section setup-summary-section"
 >
 
     <div class="section-title-row">
@@ -566,15 +407,15 @@
         <div>
 
             <div class="section-kicker">
-                Sector Rotation
+                OPPORTUNITY MAP
             </div>
 
-            <h2>
-                Sector Analysis
+            <h2 class="section-title">
+                Smart Setup Summary
             </h2>
 
-            <p>
-                Compare sector trend, momentum and relative strength.
+            <p class="section-description">
+                Quickly identify where the strongest market opportunities are developing.
             </p>
 
         </div>
@@ -582,65 +423,110 @@
     </div>
 
 
-    <div class="table-wrapper">
+    <div
+        id="setupSummaryCards"
+        class="setup-summary-grid"
+    >
+
+        <div class="summary-card">
+            <span>52W HIGH</span>
+            <strong id="summary52wHigh">--</strong>
+            <small>Breakout / High Zone</small>
+        </div>
+
+        <div class="summary-card">
+            <span>200 DMA</span>
+            <strong id="summaryDmaRecovery">--</strong>
+            <small>Recovery Watch</small>
+        </div>
+
+        <div class="summary-card">
+            <span>MOMENTUM</span>
+            <strong id="summaryMomentum">--</strong>
+            <small>Momentum Stocks</small>
+        </div>
+
+        <div class="summary-card">
+            <span>BREAKOUT</span>
+            <strong id="summaryBreakout">--</strong>
+            <small>Confirmed / Possible</small>
+        </div>
+
+        <div class="summary-card">
+            <span>NEXT DAY</span>
+            <strong id="summaryNextDay">--</strong>
+            <small>Next-session Watch</small>
+        </div>
+
+        <div class="summary-card">
+            <span>OPTIONS</span>
+            <strong id="summaryOptions">--</strong>
+            <small>Underlying Watch</small>
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================================================
+     SECTOR ANALYSIS
+========================================================= -->
+
+<section
+    id="sectorSection"
+    class="dashboard-section sector-section"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                SECTOR ROTATION
+            </div>
+
+            <h2 class="section-title">
+                Sector Analysis
+            </h2>
+
+            <p class="section-description">
+                Identify sectors showing relative strength and weakness.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper sector-table-wrapper">
 
         <table
-            class="dashboard-table"
             id="sectorTable"
+            class="dashboard-table sector-table"
         >
 
             <thead>
 
                 <tr>
-
-                    <th>
-                        Rank
-                    </th>
-
-                    <th>
-                        Sector
-                    </th>
-
-                    <th>
-                        Price
-                    </th>
-
-                    <th>
-                        Trend
-                    </th>
-
-                    <th>
-                        Momentum
-                    </th>
-
-                    <th>
-                        20D %
-                    </th>
-
-                    <th>
-                        Score
-                    </th>
-
-                    <th>
-                        View
-                    </th>
-
+                    <th>Rank</th>
+                    <th>Sector</th>
+                    <th>Price</th>
+                    <th>Trend</th>
+                    <th>Momentum</th>
+                    <th>20D %</th>
+                    <th>Score</th>
+                    <th>View</th>
                 </tr>
 
             </thead>
 
-
             <tbody>
 
                 <tr>
-
-                    <td
-                        colspan="8"
-                        class="loading-state"
-                    >
+                    <td colspan="8" class="loading-state">
                         Loading sectors...
                     </td>
-
                 </tr>
 
             </tbody>
@@ -652,14 +538,13 @@
 </section>
 
 
-
-<!-- ============================================================
-     STOCK WATCHLISTS
-     ============================================================ -->
+<!-- =========================================================
+     WATCHLISTS
+========================================================= -->
 
 <section
-    class="dashboard-section watchlist-section"
     id="watchlistSection"
+    class="dashboard-section watchlist-section"
 >
 
     <div class="section-title-row">
@@ -667,15 +552,15 @@
         <div>
 
             <div class="section-kicker">
-                Stock Intelligence
+                STOCK SCANNER
             </div>
 
-            <h2>
-                Smart Watchlists
+            <h2 class="section-title">
+                Decision Watchlists
             </h2>
 
-            <p>
-                Ranked stocks based on technicals, fundamentals, market regime and setup quality.
+            <p class="section-description">
+                Ranked stocks filtered according to the current market environment.
             </p>
 
         </div>
@@ -683,10 +568,7 @@
     </div>
 
 
-
-    <!-- ========================================================
-         WATCHLIST TABS
-         ======================================================== -->
+    <!-- Watchlist tabs -->
 
     <div
         id="watchlistTabs"
@@ -696,93 +578,99 @@
         <button
             class="watchlist-tab active"
             data-watchlist="next_day"
-            type="button"
         >
             Next Day
+            <span data-count="next_day">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="intraday"
-            type="button"
         >
             Intraday
+            <span data-count="intraday">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="swing"
-            type="button"
         >
             Equity Swing
+            <span data-count="swing">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="long_term"
-            type="button"
         >
             Long Term
+            <span data-count="long_term">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="52w_high"
-            type="button"
         >
             52W High
+            <span data-count="52w_high">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="dma_recovery"
-            type="button"
         >
             200 DMA Recovery
+            <span data-count="dma_recovery">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="momentum"
-            type="button"
         >
             Momentum
+            <span data-count="momentum">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="breakout"
-            type="button"
         >
             Breakout
+            <span data-count="breakout">0</span>
         </button>
 
         <button
             class="watchlist-tab"
             data-watchlist="options"
-            type="button"
         >
             Options Watch
+            <span data-count="options">0</span>
         </button>
 
     </div>
 
 
-
-    <!-- ========================================================
-         WATCHLIST TOOLBAR
-         ======================================================== -->
+    <!-- Watchlist toolbar -->
 
     <div class="watchlist-toolbar">
 
-        <div
-            id="watchlistCount"
-            class="watchlist-count"
-        >
-            Loading...
+        <div>
+
+            <strong id="watchlistTitle">
+                Next Day Watchlist
+            </strong>
+
+            <span
+                id="watchlistCount"
+                class="watchlist-count"
+            >
+                0 stocks
+            </span>
+
         </div>
 
-        <div>
+
+        <div class="watchlist-actions">
 
             <button
                 id="downloadWatchlist"
@@ -797,93 +685,55 @@
     </div>
 
 
+    <div
+        id="watchlistTableNote"
+        class="table-note"
+    >
+        Showing top opportunities. Click any stock for complete analysis.
+    </div>
 
-    <!-- ========================================================
-         STOCK TABLE
-         ======================================================== -->
 
-    <div class="table-wrapper">
+    <!-- Stock table -->
+
+    <div class="table-wrapper stock-table-wrapper">
 
         <table
-            class="dashboard-table stock-table"
             id="stockTable"
+            class="dashboard-table stock-table"
         >
 
             <thead>
 
                 <tr>
 
-                    <th>
-                        Rank
-                    </th>
-
-                    <th>
-                        Stock
-                    </th>
-
-                    <th>
-                        Price
-                    </th>
-
-                    <th>
-                        Change
-                    </th>
-
-                    <th>
-                        Score
-                    </th>
-
-                    <th>
-                        Setup
-                    </th>
-
-                    <th>
-                        Entry
-                    </th>
-
-                    <th>
-                        Stop Loss
-                    </th>
-
-                    <th>
-                        Target 1
-                    </th>
-
-                    <th>
-                        Target 2
-                    </th>
-
-                    <th>
-                        R:R
-                    </th>
-
-                    <th>
-                        Trend
-                    </th>
-
-                    <th>
-                        Momentum
-                    </th>
-
-                    <th>
-                        RSI
-                    </th>
-
-                    <th>
-                        Volume
-                    </th>
+                    <th>Rank</th>
+                    <th>Stock</th>
+                    <th>LTP</th>
+                    <th>Change</th>
+                    <th>200 DMA</th>
+                    <th>52W High</th>
+                    <th>RSI</th>
+                    <th>Volume</th>
+                    <th>Technical</th>
+                    <th>Fundamental</th>
+                    <th>Score</th>
+                    <th>Setup</th>
+                    <th>Entry</th>
+                    <th>Stop Loss</th>
+                    <th>T1</th>
+                    <th>T2</th>
+                    <th>R:R</th>
 
                 </tr>
 
             </thead>
 
-
-            <tbody>
+            <tbody id="stockTableBody">
 
                 <tr>
 
                     <td
-                        colspan="15"
+                        colspan="17"
                         class="loading-state"
                     >
                         Loading stocks...
@@ -897,25 +747,16 @@
 
     </div>
 
-
-    <div class="table-note">
-
-        Click any stock to open the detailed technical,
-        fundamental and trade-plan view.
-
-    </div>
-
 </section>
 
 
-
-<!-- ============================================================
-     PORTFOLIO BUILDER
-     ============================================================ -->
+<!-- =========================================================
+     SMART PORTFOLIO BUILDER
+========================================================= -->
 
 <section
-    class="dashboard-section portfolio-section"
     id="portfolioSection"
+    class="dashboard-section portfolio-section"
 >
 
     <div class="section-title-row">
@@ -923,17 +764,21 @@
         <div>
 
             <div class="section-kicker">
-                Capital Allocation
+                CAPITAL ALLOCATION
             </div>
 
-            <h2>
-                Portfolio Builder
+            <h2 class="section-title">
+                Smart Portfolio Builder
             </h2>
 
-            <p>
-                Build a diversified portfolio using the dashboard's ranked trade plans.
+            <p class="section-description">
+                Build a diversified portfolio using the dashboard's ranked setups and calculated trade plans.
             </p>
 
+        </div>
+
+        <div class="portfolio-engine-badge">
+            ENGINE DRIVEN
         </div>
 
     </div>
@@ -945,7 +790,7 @@
     >
 
         <div class="loading-state">
-            Loading Portfolio Builder...
+            Preparing Portfolio Builder...
         </div>
 
     </div>
@@ -953,20 +798,18 @@
 </section>
 
 
-
-</main>
-
-
-
-<!-- ============================================================
+<!-- =========================================================
      STOCK DETAIL MODAL
-     ============================================================ -->
+========================================================= -->
 
 <div
     id="stockModal"
     class="stock-modal"
     aria-hidden="true"
 >
+
+    <div class="stock-modal-overlay"></div>
+
 
     <div class="stock-modal-content">
 
@@ -986,7 +829,7 @@
         >
 
             <div class="loading-state">
-                Loading stock details...
+                Loading stock analysis...
             </div>
 
         </div>
@@ -996,44 +839,40 @@
 </div>
 
 
+</main>
 
-<!-- ============================================================
+
+<!-- =========================================================
      FOOTER
-     ============================================================ -->
+========================================================= -->
 
 <footer class="dashboard-footer">
 
     <div>
-        NSE Smart Market Dashboard V2.1
+
+        <strong>NSE SMART MARKET DASHBOARD</strong>
+
+        <span>
+            Decision-support dashboard for market and stock analysis.
+        </span>
+
     </div>
 
     <div>
-        Created by
-        <strong>Rakesh Nagapuri</strong>
-    </div>
 
-    <div>
-        For research and educational purposes only.
-        Not investment advice.
+        Created by <strong>Rakesh Nagapuri</strong>
+
     </div>
 
 </footer>
 
 
-
-<!-- ============================================================
+<!-- =========================================================
      JAVASCRIPT
-     ============================================================ -->
+========================================================= -->
 
-<script
-    src="assets/dashboard.js"
-></script>
-
-<script
-    src="assets/portfolio.js"
-></script>
-
+<script src="assets/dashboard.js"></script>
+<script src="assets/portfolio.js"></script>
 
 </body>
-
 </html>
