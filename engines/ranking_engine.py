@@ -1,6 +1,6 @@
 # ============================================================
-# NSE SMART MARKET DASHBOARD V2
-# RANKING + WATCHLIST ENGINE
+# NSE SMART MARKET DASHBOARD V2.1
+# RANKING + WATCHLIST + TRADE PLAN ENGINE
 # Created by Rakesh Nagapuri
 # ============================================================
 
@@ -44,7 +44,22 @@ def safe_float(value):
         return np.nan
 
 
-def clamp(value, minimum=0, maximum=100):
+def clean_text(value):
+
+    if value is None:
+        return ""
+
+    if pd.isna(value):
+        return ""
+
+    return str(value).strip()
+
+
+def clamp(
+    value,
+    minimum=0,
+    maximum=100
+):
 
     if pd.isna(value):
         return np.nan
@@ -68,6 +83,7 @@ def normalize_series(series):
     valid = numeric.dropna()
 
     if valid.empty:
+
         return pd.Series(
             np.nan,
             index=series.index
@@ -84,9 +100,21 @@ def normalize_series(series):
         )
 
     return (
-        (numeric - minimum) /
+        (numeric - minimum)
+        /
         (maximum - minimum)
     ) * 100
+
+
+def round_price(value):
+
+    if pd.isna(value):
+        return np.nan
+
+    return round(
+        float(value),
+        2
+    )
 
 
 # ============================================================
@@ -108,11 +136,13 @@ def normalize_columns(df):
             [
                 "SYMBOL",
                 "Symbol",
-                "nse_symbol"
+                "nse_symbol",
+                "NSE_SYMBOL"
             ]
         )
 
         if source:
+
             df = df.rename(
                 columns={
                     source: "symbol"
@@ -135,6 +165,7 @@ def normalize_columns(df):
         )
 
         if source:
+
             df = df.rename(
                 columns={
                     source: "Close"
@@ -142,9 +173,7 @@ def normalize_columns(df):
             )
 
     # --------------------------------------------------------
-    # IMPORTANT:
-    # Preserve capitalized technical-engine columns.
-    # create_watchlists() expects these exact names.
+    # Trend
     # --------------------------------------------------------
 
     if "Trend" not in df.columns:
@@ -157,11 +186,16 @@ def normalize_columns(df):
         )
 
         if source:
+
             df = df.rename(
                 columns={
                     source: "Trend"
                 }
             )
+
+    # --------------------------------------------------------
+    # Momentum
+    # --------------------------------------------------------
 
     if "Momentum" not in df.columns:
 
@@ -173,6 +207,7 @@ def normalize_columns(df):
         )
 
         if source:
+
             df = df.rename(
                 columns={
                     source: "Momentum"
@@ -191,7 +226,8 @@ def normalize_columns(df):
         ],
 
         "Volume_Ratio": [
-            "volume_ratio"
+            "volume_ratio",
+            "VolumeRatio"
         ],
 
         "Distance_From_200DMA_Pct": [
@@ -210,6 +246,10 @@ def normalize_columns(df):
             "sma200"
         ],
 
+        "SMA100": [
+            "sma100"
+        ],
+
         "SMA50": [
             "sma50"
         ],
@@ -226,8 +266,17 @@ def normalize_columns(df):
             "ema20"
         ],
 
+        "EMA50": [
+            "ema50"
+        ],
+
         "ATR14": [
             "atr14"
+        ],
+
+        "ATR_Pct": [
+            "atr_percent",
+            "ATR_Percent"
         ],
 
         "Support": [
@@ -240,6 +289,20 @@ def normalize_columns(df):
 
         "Breakout_Status": [
             "breakout_status"
+        ],
+
+        "52W_High": [
+            "52w_high",
+            "52W_High"
+        ],
+
+        "52W_Low": [
+            "52w_low",
+            "52W_Low"
+        ],
+
+        "Above_200DMA": [
+            "above_200dma"
         ]
     }
 
@@ -253,6 +316,7 @@ def normalize_columns(df):
             )
 
             if source:
+
                 df = df.rename(
                     columns={
                         source: target
@@ -286,6 +350,10 @@ def normalize_columns(df):
             "ROCE"
         ],
 
+        "roa": [
+            "ROA"
+        ],
+
         "revenue_cagr": [
             "Revenue_CAGR"
         ],
@@ -294,16 +362,70 @@ def normalize_columns(df):
             "Profit_CAGR"
         ],
 
+        "eps_cagr": [
+            "EPS_CAGR"
+        ],
+
+        "revenue_growth": [
+            "Revenue_Growth"
+        ],
+
+        "earnings_growth": [
+            "Earnings_Growth",
+            "Profit_Growth"
+        ],
+
+        "eps": [
+            "EPS"
+        ],
+
         "debt_equity": [
             "Debt_Equity"
+        ],
+
+        "current_ratio": [
+            "Current_Ratio"
+        ],
+
+        "quick_ratio": [
+            "Quick_Ratio"
         ],
 
         "profit_margin": [
             "Profit_Margin"
         ],
 
+        "operating_margin": [
+            "Operating_Margin"
+        ],
+
+        "gross_margin": [
+            "Gross_Margin"
+        ],
+
+        "ebitda_margin": [
+            "EBITDA_Margin"
+        ],
+
         "pe": [
             "PE"
+        ],
+
+        "forward_pe": [
+            "Forward_PE"
+        ],
+
+        "peg": [
+            "PEG"
+        ],
+
+        "price_to_book": [
+            "Price_To_Book",
+            "PB"
+        ],
+
+        "dividend_yield": [
+            "Dividend_Yield"
         ]
     }
 
@@ -317,6 +439,7 @@ def normalize_columns(df):
             )
 
             if source:
+
                 df = df.rename(
                     columns={
                         source: target
@@ -324,7 +447,7 @@ def normalize_columns(df):
                 )
 
     # --------------------------------------------------------
-    # Required safety columns
+    # Safety columns
     # --------------------------------------------------------
 
     defaults = {
@@ -353,10 +476,25 @@ def normalize_columns(df):
         "SMA200":
             np.nan,
 
+        "SMA100":
+            np.nan,
+
         "SMA50":
             np.nan,
 
         "SMA20":
+            np.nan,
+
+        "EMA9":
+            np.nan,
+
+        "EMA20":
+            np.nan,
+
+        "EMA50":
+            np.nan,
+
+        "ATR14":
             np.nan,
 
         "RSI14":
@@ -366,6 +504,12 @@ def normalize_columns(df):
             np.nan,
 
         "Resistance":
+            np.nan,
+
+        "52W_High":
+            np.nan,
+
+        "52W_Low":
             np.nan,
 
         "Close":
@@ -396,26 +540,41 @@ def normalize_columns(df):
 
 def score_trend(row):
 
-    trend = str(
+    trend = clean_text(
         row.get(
             "Trend",
             ""
         )
     ).lower()
 
-    if trend == "strong uptrend":
+    if trend in [
+        "strong uptrend",
+        "strong bullish"
+    ]:
         return 20
 
-    if trend == "uptrend":
+    if trend in [
+        "uptrend",
+        "bullish"
+    ]:
         return 15
 
-    if trend == "sideways":
+    if trend in [
+        "sideways",
+        "neutral"
+    ]:
         return 10
 
-    if trend == "downtrend":
+    if trend in [
+        "downtrend",
+        "bearish"
+    ]:
         return 4
 
-    if trend == "strong downtrend":
+    if trend in [
+        "strong downtrend",
+        "strong bearish"
+    ]:
         return 0
 
     return 5
@@ -423,7 +582,7 @@ def score_trend(row):
 
 def score_momentum(row):
 
-    momentum = str(
+    momentum = clean_text(
         row.get(
             "Momentum",
             ""
@@ -438,6 +597,9 @@ def score_momentum(row):
 
     if momentum == "neutral":
         return 8
+
+    if momentum == "weak":
+        return 4
 
     if momentum == "negative":
         return 4
@@ -534,7 +696,7 @@ def score_position(row):
 
 def score_breakout(row):
 
-    status = str(
+    status = clean_text(
         row.get(
             "Breakout_Status",
             ""
@@ -544,7 +706,9 @@ def score_breakout(row):
     if status == "confirmed breakout":
         return 20
 
-    if status == "breakout - volume confirmation required":
+    if status == (
+        "breakout - volume confirmation required"
+    ):
         return 15
 
     if status == "near breakout":
@@ -561,15 +725,25 @@ def calculate_technical_score(row):
     score = (
 
         score_trend(row)
+
         +
+
         score_momentum(row)
+
         +
+
         score_rsi(row)
+
         +
+
         score_volume(row)
+
         +
+
         score_position(row)
+
         +
+
         score_breakout(row)
 
     )
@@ -601,7 +775,7 @@ def calculate_fundamental_score(row):
     weight = 0
 
     # --------------------------------------------------------
-    # ROE — 15
+    # ROE
     # --------------------------------------------------------
 
     roe = safe_float(
@@ -616,17 +790,21 @@ def calculate_fundamental_score(row):
 
         if roe >= 20:
             score += 15
+
         elif roe >= 15:
             score += 12
+
         elif roe >= 10:
             score += 9
+
         elif roe >= 5:
             score += 5
+
         else:
             score += 2
 
     # --------------------------------------------------------
-    # ROCE — 15
+    # ROCE
     # --------------------------------------------------------
 
     roce = safe_float(
@@ -641,17 +819,21 @@ def calculate_fundamental_score(row):
 
         if roce >= 20:
             score += 15
+
         elif roce >= 15:
             score += 12
+
         elif roce >= 10:
             score += 9
+
         elif roce >= 5:
             score += 5
+
         else:
             score += 2
 
     # --------------------------------------------------------
-    # Revenue CAGR — 10
+    # Revenue growth
     # --------------------------------------------------------
 
     revenue = safe_float(
@@ -668,7 +850,11 @@ def calculate_fundamental_score(row):
             )
         )
 
-        if not pd.isna(revenue) and abs(revenue) <= 2:
+        if (
+            not pd.isna(revenue)
+            and abs(revenue) <= 2
+        ):
+
             revenue *= 100
 
     if not pd.isna(revenue):
@@ -677,17 +863,21 @@ def calculate_fundamental_score(row):
 
         if revenue >= 20:
             score += 10
+
         elif revenue >= 15:
             score += 8
+
         elif revenue >= 10:
             score += 6
+
         elif revenue >= 5:
             score += 4
+
         elif revenue >= 0:
             score += 2
 
     # --------------------------------------------------------
-    # Profit CAGR — 10
+    # Profit growth
     # --------------------------------------------------------
 
     profit = safe_float(
@@ -704,7 +894,11 @@ def calculate_fundamental_score(row):
             )
         )
 
-        if not pd.isna(profit) and abs(profit) <= 2:
+        if (
+            not pd.isna(profit)
+            and abs(profit) <= 2
+        ):
+
             profit *= 100
 
     if not pd.isna(profit):
@@ -713,17 +907,21 @@ def calculate_fundamental_score(row):
 
         if profit >= 20:
             score += 10
+
         elif profit >= 15:
             score += 8
+
         elif profit >= 10:
             score += 6
+
         elif profit >= 5:
             score += 4
+
         elif profit >= 0:
             score += 2
 
     # --------------------------------------------------------
-    # Debt / Equity — 10
+    # Debt / Equity
     # --------------------------------------------------------
 
     debt = safe_float(
@@ -738,15 +936,18 @@ def calculate_fundamental_score(row):
 
         if debt <= 0.25:
             score += 10
+
         elif debt <= 0.50:
             score += 8
+
         elif debt <= 1:
             score += 6
+
         elif debt <= 2:
             score += 3
 
     # --------------------------------------------------------
-    # Profit Margin — 10
+    # Profit Margin
     # --------------------------------------------------------
 
     margin = safe_float(
@@ -764,17 +965,21 @@ def calculate_fundamental_score(row):
 
         if margin >= 20:
             score += 10
+
         elif margin >= 15:
             score += 8
+
         elif margin >= 10:
             score += 6
+
         elif margin >= 5:
             score += 4
+
         elif margin >= 0:
             score += 2
 
     # --------------------------------------------------------
-    # PE — 10
+    # PE
     # --------------------------------------------------------
 
     pe = safe_float(
@@ -789,10 +994,13 @@ def calculate_fundamental_score(row):
 
         if 0 < pe <= 15:
             score += 10
+
         elif pe <= 25:
             score += 8
+
         elif pe <= 35:
             score += 6
+
         elif pe <= 50:
             score += 3
 
@@ -814,31 +1022,24 @@ def calculate_fundamental_score(row):
 
 def get_sector_strength(row):
 
-    candidates = [
-
+    for column in [
         "sector_strength",
         "Sector_Strength",
         "strength",
         "Strength"
-    ]
+    ]:
 
-    source = first_existing_column(
-        pd.DataFrame(
-            [row]
-        ),
-        candidates
-    )
+        if column in row.index:
 
-    if source is None:
-        return "Unknown"
+            value = row.get(
+                column
+            )
 
-    value = row.get(
-        source
-    )
+            if not pd.isna(value):
 
-    return str(
-        value
-    )
+                return str(value)
+
+    return "Unknown"
 
 
 def calculate_sector_score(row):
@@ -890,7 +1091,7 @@ def calculate_sector_adjustment(
 
 
 # ============================================================
-# MARKET REGIME ADJUSTMENT
+# MARKET REGIME
 # ============================================================
 
 def get_market_regime_name(
@@ -932,76 +1133,56 @@ def market_adjustment(
         .lower()
     )
 
-    setup = str(
+    setup_text = str(
         setup
     ).lower()
 
-    # --------------------------------------------------------
-    # Bullish
-    # --------------------------------------------------------
-
     if "bullish" in regime:
 
-        if "breakout" in setup:
+        if "breakout" in setup_text:
             return 5
 
-        if "momentum" in setup:
+        if "momentum" in setup_text:
             return 4
 
         return 2
 
-    # --------------------------------------------------------
-    # Bullish but cautious
-    # --------------------------------------------------------
-
     if "cautious" in regime:
 
-        if "breakout" in setup:
+        if "breakout" in setup_text:
             return 2
 
         return 0
 
-    # --------------------------------------------------------
-    # Sideways
-    # --------------------------------------------------------
-
     if "sideways" in regime:
 
-        if "breakout" in setup:
+        if "breakout" in setup_text:
             return -2
 
-        if "recovery" in setup:
+        if "recovery" in setup_text:
             return 1
 
         return 0
 
-    # --------------------------------------------------------
-    # Weak
-    # --------------------------------------------------------
-
     if "weak" in regime:
 
-        if "breakout" in setup:
+        if "breakout" in setup_text:
             return -5
 
-        if "momentum" in setup:
+        if "momentum" in setup_text:
             return -3
 
         return -2
 
-    # --------------------------------------------------------
-    # Bearish
-    # --------------------------------------------------------
-
     if "bearish" in regime:
 
-        if "breakout" in setup:
+        if "breakout" in setup_text:
             return -8
 
-        if "momentum" in setup:
+        if "momentum" in setup_text:
             return -5
 
-        if "long term" in setup:
+        if "long term" in setup_text:
             return -5
 
         return -3
@@ -1015,21 +1196,21 @@ def market_adjustment(
 
 def determine_setup(row):
 
-    trend = str(
+    trend = clean_text(
         row.get(
             "Trend",
             ""
         )
     ).lower()
 
-    momentum = str(
+    momentum = clean_text(
         row.get(
             "Momentum",
             ""
         )
     ).lower()
 
-    breakout = str(
+    breakout = clean_text(
         row.get(
             "Breakout_Status",
             ""
@@ -1057,19 +1238,19 @@ def determine_setup(row):
         return "Strong Breakout Watch"
 
     # --------------------------------------------------------
-    # Near 52-week high
+    # 52W high
     # --------------------------------------------------------
 
     if (
-        not pd.isna(
-            distance_high
-        )
+        not pd.isna(distance_high)
         and
         distance_high >= -3
         and
         trend in [
             "strong uptrend",
-            "uptrend"
+            "uptrend",
+            "strong bullish",
+            "bullish"
         ]
     ):
 
@@ -1087,7 +1268,9 @@ def determine_setup(row):
         and
         trend in [
             "strong uptrend",
-            "uptrend"
+            "uptrend",
+            "strong bullish",
+            "bullish"
         ]
     ):
 
@@ -1098,9 +1281,7 @@ def determine_setup(row):
     # --------------------------------------------------------
 
     if (
-        not pd.isna(
-            distance_dma
-        )
+        not pd.isna(distance_dma)
         and
         -7 <= distance_dma <= 5
         and
@@ -1137,9 +1318,17 @@ def determine_setup(row):
     # --------------------------------------------------------
 
     if (
-        "downtrend" in trend
+        (
+            "downtrend" in trend
+            or
+            "bearish" in trend
+        )
         and
-        "negative" in momentum
+        (
+            "negative" in momentum
+            or
+            "weak" in momentum
+        )
     ):
 
         return "Weak / Avoid"
@@ -1148,7 +1337,7 @@ def determine_setup(row):
 
 
 # ============================================================
-# RISK / REWARD
+# OLD RISK / REWARD
 # ============================================================
 
 def calculate_risk_reward(row):
@@ -1183,15 +1372,899 @@ def calculate_risk_reward(row):
 
         return np.nan
 
-    risk = price - support
+    risk = (
+        price -
+        support
+    )
 
-    reward = resistance - price
+    reward = (
+        resistance -
+        price
+    )
 
     if risk <= 0:
 
         return np.nan
 
     return reward / risk
+
+
+# ============================================================
+# TRADE PLAN ENGINE
+# ============================================================
+
+def calculate_trade_plan(row):
+
+    price = safe_float(
+        row.get(
+            "Close"
+        )
+    )
+
+    support = safe_float(
+        row.get(
+            "Support"
+        )
+    )
+
+    resistance = safe_float(
+        row.get(
+            "Resistance"
+        )
+    )
+
+    sma20 = safe_float(
+        row.get(
+            "SMA20"
+        )
+    )
+
+    sma50 = safe_float(
+        row.get(
+            "SMA50"
+        )
+    )
+
+    sma200 = safe_float(
+        row.get(
+            "SMA200"
+        )
+    )
+
+    atr = safe_float(
+        row.get(
+            "ATR14"
+        )
+    )
+
+    high_52w = safe_float(
+        row.get(
+            "52W_High"
+        )
+    )
+
+    setup = clean_text(
+        row.get(
+            "setup"
+        )
+    )
+
+    result = {
+
+        "entry_low":
+            np.nan,
+
+        "entry_high":
+            np.nan,
+
+        "entry_price":
+            np.nan,
+
+        "stop_loss":
+            np.nan,
+
+        "target_1":
+            np.nan,
+
+        "target_2":
+            np.nan,
+
+        "risk_points":
+            np.nan,
+
+        "reward_1_points":
+            np.nan,
+
+        "reward_2_points":
+            np.nan,
+
+        "risk_reward_1":
+            np.nan,
+
+        "risk_reward_2":
+            np.nan,
+
+        "trade_plan_type":
+            "No Trade Plan",
+
+        "trade_plan_status":
+            "Confirmation Required",
+
+        "trade_plan_reason":
+            "",
+
+        "invalidation":
+            ""
+    }
+
+    # --------------------------------------------------------
+    # Basic validation
+    # --------------------------------------------------------
+
+    if (
+        pd.isna(price)
+        or
+        price <= 0
+    ):
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Price data unavailable."
+        )
+
+        return result
+
+    # --------------------------------------------------------
+    # ATR fallback
+    # --------------------------------------------------------
+
+    if (
+        pd.isna(atr)
+        or
+        atr <= 0
+    ):
+
+        atr = price * 0.02
+
+    # --------------------------------------------------------
+    # Support fallback
+    # --------------------------------------------------------
+
+    if (
+        pd.isna(support)
+        or
+        support <= 0
+    ):
+
+        candidates = [
+
+            sma20,
+            sma50,
+            sma200,
+            price - atr
+
+        ]
+
+        candidates = [
+
+            value
+            for value in candidates
+            if (
+                not pd.isna(value)
+                and
+                value > 0
+                and
+                value < price
+            )
+
+        ]
+
+        if candidates:
+
+            support = max(
+                candidates
+            )
+
+        else:
+
+            support = (
+                price -
+                atr
+            )
+
+    # --------------------------------------------------------
+    # Resistance fallback
+    # --------------------------------------------------------
+
+    if (
+        pd.isna(resistance)
+        or
+        resistance <= price
+    ):
+
+        candidates = [
+
+            sma20,
+            sma50,
+            sma200,
+            high_52w,
+            price + atr
+
+        ]
+
+        candidates = [
+
+            value
+            for value in candidates
+            if (
+                not pd.isna(value)
+                and
+                value > price
+            )
+
+        ]
+
+        if candidates:
+
+            resistance = min(
+                candidates
+            )
+
+        else:
+
+            resistance = (
+                price +
+                atr
+            )
+
+    # ========================================================
+    # STRONG BREAKOUT
+    # ========================================================
+
+    if setup == "Strong Breakout Watch":
+
+        buffer = max(
+            atr * 0.15,
+            resistance * 0.002
+        )
+
+        entry_low = (
+            resistance +
+            buffer
+        )
+
+        entry_high = (
+            resistance +
+            atr * 0.50
+        )
+
+        entry = entry_low
+
+        stop = max(
+            support,
+            resistance - atr
+        )
+
+        target_1 = (
+            entry +
+            atr * 2
+        )
+
+        target_2 = (
+            entry +
+            atr * 3.5
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "Breakout Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Strong Setup"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Confirmed breakout above "
+            "resistance. Entry requires "
+            "breakout confirmation."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Below ₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # BREAKOUT CONFIRMATION
+    # ========================================================
+
+    elif setup == (
+        "Breakout Confirmation Required"
+    ):
+
+        buffer = max(
+            atr * 0.20,
+            resistance * 0.002
+        )
+
+        entry_low = (
+            resistance +
+            buffer
+        )
+
+        entry_high = (
+            resistance +
+            atr * 0.60
+        )
+
+        entry = entry_low
+
+        stop = max(
+            support,
+            resistance - atr
+        )
+
+        target_1 = (
+            entry +
+            atr * 1.75
+        )
+
+        target_2 = (
+            entry +
+            atr * 3
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "Breakout Confirmation"
+
+        result[
+            "trade_plan_status"
+        ] = "Confirmation Required"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Price is near resistance. "
+            "Wait for price and volume "
+            "confirmation above resistance."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Breakout invalid below "
+            f"₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # PRE-BREAKOUT
+    # ========================================================
+
+    elif setup == "Pre-Breakout Watch":
+
+        entry_low = max(
+            support,
+            resistance - atr * 0.75
+        )
+
+        entry_high = (
+            resistance -
+            atr * 0.15
+        )
+
+        if entry_low >= entry_high:
+
+            entry_low = (
+                price -
+                atr * 0.25
+            )
+
+            entry_high = (
+                price +
+                atr * 0.10
+            )
+
+        entry = (
+            entry_low +
+            entry_high
+        ) / 2
+
+        stop = min(
+            support - atr * 0.25,
+            entry - atr
+        )
+
+        target_1 = resistance
+
+        target_2 = (
+            resistance +
+            atr * 2
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "Pre-Breakout Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Watch"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Price is approaching "
+            "resistance. Prefer entry near "
+            "the breakout zone rather than "
+            "chasing price."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Below ₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # 52 WEEK HIGH
+    # ========================================================
+
+    elif setup == "52W High Watch":
+
+        if (
+            not pd.isna(high_52w)
+            and
+            high_52w > price
+        ):
+
+            breakout_level = high_52w
+
+        else:
+
+            breakout_level = resistance
+
+        buffer = max(
+            atr * 0.15,
+            breakout_level * 0.002
+        )
+
+        entry_low = (
+            breakout_level +
+            buffer
+        )
+
+        entry_high = (
+            breakout_level +
+            atr * 0.50
+        )
+
+        entry = entry_low
+
+        stop = max(
+            support,
+            breakout_level - atr
+        )
+
+        target_1 = (
+            entry +
+            atr * 2
+        )
+
+        target_2 = (
+            entry +
+            atr * 3.5
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "52W High Breakout"
+
+        result[
+            "trade_plan_status"
+        ] = "Watch"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Stock is near its rolling "
+            "52-week high. Entry requires "
+            "breakout confirmation."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Below ₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # 200 DMA RECOVERY
+    # ========================================================
+
+    elif setup == "200 DMA Recovery Watch":
+
+        if (
+            not pd.isna(sma200)
+            and
+            sma200 > 0
+        ):
+
+            recovery_level = sma200
+
+        else:
+
+            recovery_level = price
+
+        entry_low = max(
+            support,
+            recovery_level
+        )
+
+        entry_high = (
+            recovery_level +
+            atr * 0.50
+        )
+
+        entry = entry_low
+
+        stop = min(
+            support - atr * 0.25,
+            recovery_level - atr
+        )
+
+        target_1 = max(
+            resistance,
+            sma50
+            if not pd.isna(sma50)
+            else resistance
+        )
+
+        target_2 = (
+            target_1 +
+            atr * 2
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "200 DMA Recovery"
+
+        result[
+            "trade_plan_status"
+        ] = "Confirmation Required"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Stock is recovering around "
+            "the 200 DMA. Confirmation "
+            "above the recovery level "
+            "is preferred."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Below ₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # MOMENTUM
+    # ========================================================
+
+    elif setup == "Momentum Watch":
+
+        entry_low = max(
+            support,
+            price - atr * 0.50
+        )
+
+        entry_high = (
+            price +
+            atr * 0.25
+        )
+
+        entry = price
+
+        stop = max(
+            support,
+            price - atr * 1.25
+        )
+
+        target_1 = max(
+            resistance,
+            price + atr * 1.75
+        )
+
+        target_2 = max(
+            target_1,
+            price + atr * 3
+        )
+
+        result[
+            "trade_plan_type"
+        ] = "Momentum Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Watch"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Positive trend and momentum. "
+            "Prefer entry near current price "
+            "or on a controlled pullback."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            f"Below ₹{stop:.2f}"
+        )
+
+    # ========================================================
+    # NEUTRAL
+    # ========================================================
+
+    elif setup == "Neutral Watch":
+
+        result[
+            "trade_plan_type"
+        ] = "No Immediate Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Confirmation Required"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Technical setup is not strong "
+            "enough for an immediate trade."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            "Wait for a clearer setup."
+        )
+
+        return result
+
+    # ========================================================
+    # WEAK / AVOID
+    # ========================================================
+
+    elif setup == "Weak / Avoid":
+
+        result[
+            "trade_plan_type"
+        ] = "Avoid"
+
+        result[
+            "trade_plan_status"
+        ] = "Avoid"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Trend and momentum do not "
+            "provide sufficient confirmation."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            "No long trade setup."
+        )
+
+        return result
+
+    else:
+
+        result[
+            "trade_plan_type"
+        ] = "No Immediate Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Confirmation Required"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "No validated trade setup."
+        )
+
+        result[
+            "invalidation"
+        ] = (
+            "Wait for confirmation."
+        )
+
+        return result
+
+    # ========================================================
+    # SANITY CHECK
+    # ========================================================
+
+    if (
+        pd.isna(entry)
+        or
+        pd.isna(stop)
+        or
+        pd.isna(target_1)
+        or
+        pd.isna(target_2)
+    ):
+
+        result[
+            "trade_plan_type"
+        ] = "No Immediate Trade"
+
+        result[
+            "trade_plan_status"
+        ] = "Insufficient Data"
+
+        result[
+            "trade_plan_reason"
+        ] = (
+            "Insufficient technical levels "
+            "to calculate a reliable trade plan."
+        )
+
+        return result
+
+    # --------------------------------------------------------
+    # Stop loss below entry
+    # --------------------------------------------------------
+
+    if stop >= entry:
+
+        stop = (
+            entry -
+            max(
+                atr,
+                entry * 0.01
+            )
+        )
+
+    # --------------------------------------------------------
+    # Target 1 above entry
+    # --------------------------------------------------------
+
+    if target_1 <= entry:
+
+        target_1 = (
+            entry +
+            atr * 1.5
+        )
+
+    # --------------------------------------------------------
+    # Target 2 above Target 1
+    # --------------------------------------------------------
+
+    if target_2 <= target_1:
+
+        target_2 = (
+            target_1 +
+            atr * 1.5
+        )
+
+    # ========================================================
+    # RISK / REWARD
+    # ========================================================
+
+    risk = (
+        entry -
+        stop
+    )
+
+    reward_1 = (
+        target_1 -
+        entry
+    )
+
+    reward_2 = (
+        target_2 -
+        entry
+    )
+
+    if risk <= 0:
+
+        result[
+            "trade_plan_status"
+        ] = "Insufficient Data"
+
+        return result
+
+    rr1 = (
+        reward_1 /
+        risk
+    )
+
+    rr2 = (
+        reward_2 /
+        risk
+    )
+
+    # ========================================================
+    # OUTPUT
+    # ========================================================
+
+    result[
+        "entry_low"
+    ] = round_price(
+        entry_low
+    )
+
+    result[
+        "entry_high"
+    ] = round_price(
+        entry_high
+    )
+
+    result[
+        "entry_price"
+    ] = round_price(
+        entry
+    )
+
+    result[
+        "stop_loss"
+    ] = round_price(
+        stop
+    )
+
+    result[
+        "target_1"
+    ] = round_price(
+        target_1
+    )
+
+    result[
+        "target_2"
+    ] = round_price(
+        target_2
+    )
+
+    result[
+        "risk_points"
+    ] = round_price(
+        risk
+    )
+
+    result[
+        "reward_1_points"
+    ] = round_price(
+        reward_1
+    )
+
+    result[
+        "reward_2_points"
+    ] = round_price(
+        reward_2
+    )
+
+    result[
+        "risk_reward_1"
+    ] = round(
+        rr1,
+        2
+    )
+
+    result[
+        "risk_reward_2"
+    ] = round(
+        rr2,
+        2
+    )
+
+    return result
 
 
 # ============================================================
@@ -1202,21 +2275,21 @@ def create_setup_reasons(row):
 
     reasons = []
 
-    trend = str(
+    trend = clean_text(
         row.get(
             "Trend",
             ""
         )
     )
 
-    momentum = str(
+    momentum = clean_text(
         row.get(
             "Momentum",
             ""
         )
     )
 
-    breakout = str(
+    breakout = clean_text(
         row.get(
             "Breakout_Status",
             ""
@@ -1251,19 +2324,37 @@ def create_setup_reasons(row):
     # Trend
     # --------------------------------------------------------
 
-    if "strong uptrend" in trend.lower():
+    if (
+        "strong uptrend" in
+        trend.lower()
+        or
+        "strong bullish" in
+        trend.lower()
+    ):
 
         reasons.append(
             "Strong price trend"
         )
 
-    elif "uptrend" in trend.lower():
+    elif (
+        "uptrend" in
+        trend.lower()
+        or
+        "bullish" in
+        trend.lower()
+    ):
 
         reasons.append(
             "Price is in an uptrend"
         )
 
-    elif "downtrend" in trend.lower():
+    elif (
+        "downtrend" in
+        trend.lower()
+        or
+        "bearish" in
+        trend.lower()
+    ):
 
         reasons.append(
             "Price trend is weak"
@@ -1273,7 +2364,10 @@ def create_setup_reasons(row):
     # Momentum
     # --------------------------------------------------------
 
-    if "strong positive" in momentum.lower():
+    if (
+        "strong positive"
+        in momentum.lower()
+    ):
 
         reasons.append(
             "Strong positive momentum"
@@ -1285,29 +2379,44 @@ def create_setup_reasons(row):
             "Positive momentum"
         )
 
-    elif "negative" in momentum.lower():
+    elif (
+        "negative"
+        in momentum.lower()
+        or
+        "weak"
+        in momentum.lower()
+    ):
 
         reasons.append(
-            "Negative momentum"
+            "Weak momentum"
         )
 
     # --------------------------------------------------------
     # Breakout
     # --------------------------------------------------------
 
-    if "confirmed breakout" in breakout.lower():
+    if (
+        "confirmed breakout"
+        in breakout.lower()
+    ):
 
         reasons.append(
             "Confirmed price breakout"
         )
 
-    elif "volume confirmation" in breakout.lower():
+    elif (
+        "volume confirmation"
+        in breakout.lower()
+    ):
 
         reasons.append(
             "Breakout requires volume confirmation"
         )
 
-    elif "near breakout" in breakout.lower():
+    elif (
+        "near breakout"
+        in breakout.lower()
+    ):
 
         reasons.append(
             "Price is close to resistance"
@@ -1428,10 +2537,6 @@ def merge_sector_data(
     data = data.copy()
     sectors = sector_data.copy()
 
-    # --------------------------------------------------------
-    # Identify sector symbol column
-    # --------------------------------------------------------
-
     sector_symbol = first_existing_column(
         sectors,
         [
@@ -1443,10 +2548,11 @@ def merge_sector_data(
     )
 
     if sector_symbol is None:
-
         return data
 
-    sectors["merge_symbol"] = (
+    sectors[
+        "merge_symbol"
+    ] = (
         sectors[
             sector_symbol
         ]
@@ -1459,10 +2565,6 @@ def merge_sector_data(
             regex=False
         )
     )
-
-    # --------------------------------------------------------
-    # Identify sector strength
-    # --------------------------------------------------------
 
     strength_column = first_existing_column(
         sectors,
@@ -1544,12 +2646,12 @@ def merge_sector_data(
         )
     )
 
-    # --------------------------------------------------------
-    # Merge
-    # --------------------------------------------------------
-
-    data["merge_symbol"] = (
-        data["symbol"]
+    data[
+        "merge_symbol"
+    ] = (
+        data[
+            "symbol"
+        ]
         .astype(str)
         .str.upper()
         .str.strip()
@@ -1599,9 +2701,9 @@ def rank_stocks(
         technical_data
     )
 
-    # --------------------------------------------------------
-    # Separate fundamental dataframe support
-    # --------------------------------------------------------
+    # ========================================================
+    # FUNDAMENTALS
+    # ========================================================
 
     if (
         fundamental_data is not None
@@ -1609,7 +2711,9 @@ def rank_stocks(
         not fundamental_data.empty
     ):
 
-        fundamentals = fundamental_data.copy()
+        fundamentals = (
+            fundamental_data.copy()
+        )
 
         if "symbol" not in fundamentals.columns:
 
@@ -1633,8 +2737,12 @@ def rank_stocks(
 
         if "symbol" in fundamentals.columns:
 
-            fundamentals["symbol"] = (
-                fundamentals["symbol"]
+            fundamentals[
+                "symbol"
+            ] = (
+                fundamentals[
+                    "symbol"
+                ]
                 .astype(str)
                 .str.upper()
                 .str.replace(
@@ -1645,17 +2753,27 @@ def rank_stocks(
             )
 
             fund_columns = [
+
                 column
                 for column
                 in fundamentals.columns
-                if column != "symbol"
-                and column not in data.columns
+
+                if (
+                    column != "symbol"
+                    and
+                    column not in data.columns
+                )
+
             ]
 
             if fund_columns:
 
-                data["symbol"] = (
-                    data["symbol"]
+                data[
+                    "symbol"
+                ] = (
+                    data[
+                        "symbol"
+                    ]
                     .astype(str)
                     .str.upper()
                     .str.replace(
@@ -1669,39 +2787,65 @@ def rank_stocks(
                     fundamentals[
                         [
                             "symbol"
-                        ] +
+                        ]
+                        +
                         fund_columns
                     ],
                     on="symbol",
                     how="left"
                 )
 
-    # --------------------------------------------------------
-    # Sector data
-    # --------------------------------------------------------
+    # ========================================================
+    # SECTOR
+    # ========================================================
 
     data = merge_sector_data(
         data,
         sector_data
     )
 
-    # --------------------------------------------------------
-    # Normalize numeric fields
-    # --------------------------------------------------------
+    # ========================================================
+    # NUMERIC NORMALIZATION
+    # ========================================================
 
     numeric_columns = [
 
         "Close",
+
         "RSI14",
+
         "Volume_Ratio",
+
         "Distance_From_200DMA_Pct",
+
         "Distance_From_52W_High_Pct",
+
         "Distance_From_52W_Low_Pct",
-        "SMA200",
-        "SMA50",
+
         "SMA20",
+
+        "SMA50",
+
+        "SMA100",
+
+        "SMA200",
+
+        "EMA9",
+
+        "EMA20",
+
+        "EMA50",
+
+        "ATR14",
+
         "Support",
-        "Resistance"
+
+        "Resistance",
+
+        "52W_High",
+
+        "52W_Low"
+
     ]
 
     for column in numeric_columns:
@@ -1713,31 +2857,31 @@ def rank_stocks(
                 errors="coerce"
             )
 
-    # --------------------------------------------------------
-    # Technical score
-    # --------------------------------------------------------
+    # ========================================================
+    # TECHNICAL SCORE
+    # ========================================================
 
-    data["technical_score"] = (
-        data.apply(
-            calculate_technical_score,
-            axis=1
-        )
+    data[
+        "technical_score"
+    ] = data.apply(
+        calculate_technical_score,
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Fundamental score
-    # --------------------------------------------------------
+    # ========================================================
+    # FUNDAMENTAL SCORE
+    # ========================================================
 
-    data["fundamental_score"] = (
-        data.apply(
-            calculate_fundamental_score,
-            axis=1
-        )
+    data[
+        "fundamental_score"
+    ] = data.apply(
+        calculate_fundamental_score,
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Fundamental status
-    # --------------------------------------------------------
+    # ========================================================
+    # FUNDAMENTAL STATUS
+    # ========================================================
 
     def fundamental_status(row):
 
@@ -1747,7 +2891,7 @@ def rank_stocks(
             )
         )
 
-        existing = str(
+        existing = clean_text(
             row.get(
                 "fundamental_status",
                 ""
@@ -1758,79 +2902,78 @@ def rank_stocks(
 
             return "Available"
 
-        if existing and existing.lower() not in [
+        if existing.lower() not in [
             "",
             "nan",
-            "none"
+            "none",
+            "unavailable"
         ]:
 
             return existing
 
         return "Unavailable"
 
-    data["fundamental_status"] = (
-        data.apply(
-            fundamental_status,
-            axis=1
-        )
+    data[
+        "fundamental_status"
+    ] = data.apply(
+        fundamental_status,
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Sector score
-    # --------------------------------------------------------
+    # ========================================================
+    # SECTOR SCORE
+    # ========================================================
 
-    data["sector_score"] = (
-        data.apply(
-            calculate_sector_score,
-            axis=1
-        )
+    data[
+        "sector_score"
+    ] = data.apply(
+        calculate_sector_score,
+        axis=1
     )
 
-    data["sector_adjustment"] = (
-        data[
-            "sector_score"
-        ]
-        .apply(
-            calculate_sector_adjustment
-        )
+    data[
+        "sector_adjustment"
+    ] = data[
+        "sector_score"
+    ].apply(
+        calculate_sector_adjustment
     )
 
-    # --------------------------------------------------------
-    # Setup
-    # --------------------------------------------------------
+    # ========================================================
+    # SETUP
+    # ========================================================
 
-    data["setup"] = (
-        data.apply(
-            determine_setup,
-            axis=1
-        )
+    data[
+        "setup"
+    ] = data.apply(
+        determine_setup,
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Market adjustment
-    # --------------------------------------------------------
+    # ========================================================
+    # MARKET ADJUSTMENT
+    # ========================================================
 
-    data["market_adjustment"] = (
-        data["setup"]
-        .apply(
-            lambda setup:
-                market_adjustment(
-                    setup,
-                    market_regime
-                )
-        )
+    data[
+        "market_adjustment"
+    ] = data[
+        "setup"
+    ].apply(
+        lambda setup:
+            market_adjustment(
+                setup,
+                market_regime
+            )
     )
 
-    # --------------------------------------------------------
-    # Overall score
+    # ========================================================
+    # OVERALL SCORE
     #
-    # Technical = 60%
-    # Fundamental = 40%
+    # Technical 60%
+    # Fundamental 40%
     #
-    # When fundamentals are unavailable,
-    # do NOT treat them as zero.
-    # Use technical score as the primary score.
-    # --------------------------------------------------------
+    # Missing fundamentals are not treated as zero.
+    # ========================================================
 
     def calculate_overall(row):
 
@@ -1898,40 +3041,103 @@ def rank_stocks(
             )
         )
 
-    data["overall_score"] = (
-        data.apply(
-            calculate_overall,
-            axis=1
-        )
+    data[
+        "overall_score"
+    ] = data.apply(
+        calculate_overall,
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Risk / reward
-    # --------------------------------------------------------
+    # ========================================================
+    # TRADE PLAN
+    #
+    # This is deliberately calculated AFTER setup.
+    # Therefore entry / SL / targets are setup-specific.
+    # ========================================================
 
-    data["risk_reward"] = (
-        data.apply(
-            calculate_risk_reward,
-            axis=1
-        )
+    trade_plan = data.apply(
+        calculate_trade_plan,
+        axis=1,
+        result_type="expand"
     )
 
-    # --------------------------------------------------------
-    # Reasons
-    # --------------------------------------------------------
-
-    data["setup_reasons"] = (
-        data.apply(
-            create_setup_reasons,
-            axis=1
-        )
+    data = pd.concat(
+        [
+            data,
+            trade_plan
+        ],
+        axis=1
     )
 
-    # --------------------------------------------------------
-    # Technical rank
-    # --------------------------------------------------------
+    # ========================================================
+    # RISK / REWARD
+    # ========================================================
 
-    data["technical_rank"] = (
+    data[
+        "risk_reward"
+    ] = data[
+        "risk_reward_1"
+    ]
+
+    # ========================================================
+    # SETUP REASONS
+    # ========================================================
+
+    data[
+        "setup_reasons"
+    ] = data.apply(
+        create_setup_reasons,
+        axis=1
+    )
+
+    # ========================================================
+    # TRADE PLAN QUALITY
+    # ========================================================
+
+    def trade_quality(row):
+
+        rr = safe_float(
+            row.get(
+                "risk_reward_1"
+            )
+        )
+
+        status = clean_text(
+            row.get(
+                "trade_plan_status"
+            )
+        )
+
+        if status == "Avoid":
+            return "Avoid"
+
+        if pd.isna(rr):
+            return "Not Ready"
+
+        if rr >= 2:
+
+            return "Strong"
+
+        if rr >= 1.5:
+
+            return "Acceptable"
+
+        return "Poor"
+
+    data[
+        "trade_plan_quality"
+    ] = data.apply(
+        trade_quality,
+        axis=1
+    )
+
+    # ========================================================
+    # TECHNICAL RANK
+    # ========================================================
+
+    data[
+        "technical_rank"
+    ] = (
         data[
             "technical_score"
         ]
@@ -1939,20 +3145,16 @@ def rank_stocks(
             method="min",
             ascending=False
         )
-    )
-
-    data["technical_rank"] = (
-        data[
-            "technical_rank"
-        ]
         .astype("Int64")
     )
 
-    # --------------------------------------------------------
-    # Final rank
-    # --------------------------------------------------------
+    # ========================================================
+    # FINAL RANK
+    # ========================================================
 
-    data["rank"] = (
+    data[
+        "rank"
+    ] = (
         data[
             "overall_score"
         ]
@@ -1960,18 +3162,12 @@ def rank_stocks(
             method="min",
             ascending=False
         )
-    )
-
-    data["rank"] = (
-        data[
-            "rank"
-        ]
         .astype("Int64")
     )
 
-    # --------------------------------------------------------
-    # Sort
-    # --------------------------------------------------------
+    # ========================================================
+    # SORT
+    # ========================================================
 
     data = data.sort_values(
         by=[
@@ -2003,7 +3199,9 @@ def positive_trend_mask(data):
     ].astype(str).str.lower().isin(
         [
             "strong uptrend",
-            "uptrend"
+            "uptrend",
+            "strong bullish",
+            "bullish"
         ]
     )
 
@@ -2024,12 +3222,16 @@ def above_200dma_mask(data):
 
     return (
         pd.to_numeric(
-            data["Close"],
+            data[
+                "Close"
+            ],
             errors="coerce"
         )
         >
         pd.to_numeric(
-            data["SMA200"],
+            data[
+                "SMA200"
+            ],
             errors="coerce"
         )
     )
@@ -2044,60 +3246,149 @@ def create_watchlists(
     market_regime=None
 ):
 
+    empty = {
+        "next_day":
+            pd.DataFrame(),
+
+        "intraday":
+            pd.DataFrame(),
+
+        "swing":
+            pd.DataFrame(),
+
+        "long_term":
+            pd.DataFrame(),
+
+        "52w_high":
+            pd.DataFrame(),
+
+        "dma_recovery":
+            pd.DataFrame(),
+
+        "momentum":
+            pd.DataFrame(),
+
+        "breakout":
+            pd.DataFrame(),
+
+        "options":
+            pd.DataFrame()
+    }
+
     if (
         ranked_data is None
         or
         ranked_data.empty
     ):
 
-        return {
-            "next_day": pd.DataFrame(),
-            "intraday": pd.DataFrame(),
-            "swing": pd.DataFrame(),
-            "long_term": pd.DataFrame(),
-            "52w_high": pd.DataFrame(),
-            "dma_recovery": pd.DataFrame(),
-            "momentum": pd.DataFrame(),
-            "breakout": pd.DataFrame(),
-            "options": pd.DataFrame()
-        }
+        return empty
 
     data = normalize_columns(
         ranked_data
     )
 
-    # --------------------------------------------------------
-    # Ensure setup exists
-    # --------------------------------------------------------
-
     if "setup" not in data.columns:
 
-        data["setup"] = (
-            data.apply(
-                determine_setup,
-                axis=1
-            )
+        data[
+            "setup"
+        ] = data.apply(
+            determine_setup,
+            axis=1
         )
 
-    # --------------------------------------------------------
-    # Ensure scores exist
-    # --------------------------------------------------------
+    if (
+        "technical_score"
+        not in data.columns
+    ):
 
-    if "technical_score" not in data.columns:
-
-        data["technical_score"] = (
-            data.apply(
-                calculate_technical_score,
-                axis=1
-            )
+        data[
+            "technical_score"
+        ] = data.apply(
+            calculate_technical_score,
+            axis=1
         )
 
-    if "overall_score" not in data.columns:
+    if (
+        "overall_score"
+        not in data.columns
+    ):
 
-        data["overall_score"] = (
-            data[
-                "technical_score"
-            ]
+        data[
+            "overall_score"
+        ] = data[
+            "technical_score"
+        ]
+
+    # --------------------------------------------------------
+    # Ensure trade plan exists
+    # --------------------------------------------------------
+
+    required_trade_columns = [
+        "entry_low",
+        "entry_high",
+        "entry_price",
+        "stop_loss",
+        "target_1",
+        "target_2",
+        "risk_points",
+        "reward_1_points",
+        "reward_2_points",
+        "risk_reward_1",
+        "risk_reward_2",
+        "trade_plan_type",
+        "trade_plan_status",
+        "trade_plan_reason",
+        "invalidation",
+        "trade_plan_quality"
+    ]
+
+    missing_trade_columns = [
+        column
+        for column
+        in required_trade_columns
+        if column not in data.columns
+    ]
+
+    if missing_trade_columns:
+
+        trade_plan = data.apply(
+            calculate_trade_plan,
+            axis=1,
+            result_type="expand"
+        )
+
+        data = pd.concat(
+            [
+                data,
+                trade_plan
+            ],
+            axis=1
+        )
+
+        def quality(row):
+
+            rr = safe_float(
+                row.get(
+                    "risk_reward_1"
+                )
+            )
+
+            if pd.isna(rr):
+                return "Not Ready"
+
+            if rr >= 2:
+                return "Strong"
+
+            if rr >= 1.5:
+                return "Acceptable"
+
+            return "Poor"
+
+        data[
+            "trade_plan_quality"
+        ] = data.apply(
+            quality,
+            axis=1
         )
 
     # --------------------------------------------------------
@@ -2149,7 +3440,7 @@ def create_watchlists(
     )
 
     # --------------------------------------------------------
-    # 200 DMA recovery
+    # 200 DMA
     # --------------------------------------------------------
 
     dma_distance = pd.to_numeric(
@@ -2192,11 +3483,9 @@ def create_watchlists(
         )
     )
 
-    # --------------------------------------------------------
-    # Next Day
-    #
-    # In bearish/weak markets, require stronger confirmation.
-    # --------------------------------------------------------
+    # ========================================================
+    # NEXT DAY
+    # ========================================================
 
     if (
         "bearish" in regime
@@ -2205,8 +3494,11 @@ def create_watchlists(
     ):
 
         next_day_mask = (
+
             confirmed_breakout
+
             |
+
             (
                 trend_positive
                 &
@@ -2229,14 +3521,19 @@ def create_watchlists(
     else:
 
         next_day_mask = (
+
             confirmed_breakout
+
             |
+
             (
                 trend_positive
                 &
                 momentum_positive
             )
+
             |
+
             possible_breakout
         )
 
@@ -2244,20 +3541,24 @@ def create_watchlists(
         next_day_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Intraday
+    # ========================================================
+    # INTRADAY CANDIDATES
     #
-    # EOD data cannot provide true live VWAP.
-    # This is therefore a candidate watchlist only.
-    # --------------------------------------------------------
+    # Important:
+    # EOD data cannot produce true live VWAP.
+    # Therefore this remains a candidate list.
+    # ========================================================
 
     intraday_mask = (
+
         (
             confirmed_breakout
             |
             possible_breakout
         )
+
         &
+
         (
             pd.to_numeric(
                 data[
@@ -2273,19 +3574,24 @@ def create_watchlists(
         intraday_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Swing
-    # --------------------------------------------------------
+    # ========================================================
+    # SWING
+    # ========================================================
 
     swing_mask = (
+
         (
             trend_positive
             &
             momentum_positive
         )
+
         |
+
         confirmed_breakout
+
         |
+
         near_200dma
     )
 
@@ -2293,11 +3599,9 @@ def create_watchlists(
         swing_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Long Term
-    #
-    # More conservative.
-    # --------------------------------------------------------
+    # ========================================================
+    # LONG TERM
+    # ========================================================
 
     fundamental_available = (
         pd.to_numeric(
@@ -2320,16 +3624,23 @@ def create_watchlists(
     )
 
     long_term_mask = (
+
         above_200
+
         &
+
         trend_positive
+
         &
+
         (
             strong_fundamentals
             |
             ~fundamental_available
         )
+
         &
+
         (
             pd.to_numeric(
                 data[
@@ -2345,13 +3656,16 @@ def create_watchlists(
         long_term_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # 52W High
-    # --------------------------------------------------------
+    # ========================================================
+    # 52W HIGH
+    # ========================================================
 
     high_mask = (
+
         near_52w_high
+
         &
+
         (
             trend_positive
             |
@@ -2363,16 +3677,21 @@ def create_watchlists(
         high_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # 200 DMA Recovery
-    # --------------------------------------------------------
+    # ========================================================
+    # 200 DMA RECOVERY
+    # ========================================================
 
-    recovery_mask = (
+    dma_recovery_mask = (
+
         near_200dma
+
         &
+
         (
             momentum_positive
+
             |
+
             (
                 data[
                     "Momentum"
@@ -2385,53 +3704,57 @@ def create_watchlists(
     )
 
     dma_recovery = data[
-        recovery_mask
+        dma_recovery_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Momentum
-    # --------------------------------------------------------
+    # ========================================================
+    # MOMENTUM
+    # ========================================================
+
+    momentum_mask = (
+
+        trend_positive
+        &
+        momentum_positive
+    )
 
     momentum_watch = data[
-        momentum_positive
-        &
-        trend_positive
+        momentum_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Breakout
-    # --------------------------------------------------------
+    # ========================================================
+    # BREAKOUT
+    # ========================================================
 
-    breakout_watch = data[
+    breakout_mask = (
         confirmed_breakout
         |
         possible_breakout
+    )
+
+    breakout_watch = data[
+        breakout_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Options
+    # ========================================================
+    # OPTIONS
     #
-    # Underlying candidates only.
-    # No fake option-chain data.
-    # --------------------------------------------------------
+    # Underlying-stock candidates only.
+    # No fake option-chain signals.
+    # ========================================================
 
     options_mask = (
+
         (
             confirmed_breakout
             |
+            possible_breakout
+            |
             momentum_positive
         )
+
         &
-        (
-            pd.to_numeric(
-                data[
-                    "Volume_Ratio"
-                ],
-                errors="coerce"
-            )
-            >= 1.2
-        )
-        &
+
         (
             pd.to_numeric(
                 data[
@@ -2439,7 +3762,7 @@ def create_watchlists(
                 ],
                 errors="coerce"
             )
-            >= 45
+            >= 50
         )
     )
 
@@ -2447,9 +3770,9 @@ def create_watchlists(
         options_mask
     ].copy()
 
-    # --------------------------------------------------------
-    # Sort all lists
-    # --------------------------------------------------------
+    # ========================================================
+    # WATCHLIST DICTIONARY
+    # ========================================================
 
     watchlists = {
 
@@ -2481,6 +3804,10 @@ def create_watchlists(
             options_watch
     }
 
+    # ========================================================
+    # SORT + DEDUPLICATE
+    # ========================================================
+
     for name, watchlist in (
         watchlists.items()
     ):
@@ -2488,31 +3815,49 @@ def create_watchlists(
         if watchlist.empty:
             continue
 
-        watchlist = watchlist.sort_values(
-            by=[
-                "overall_score",
+        sort_columns = []
+
+        if "overall_score" in watchlist.columns:
+
+            sort_columns.append(
+                "overall_score"
+            )
+
+        if "technical_score" in watchlist.columns:
+
+            sort_columns.append(
                 "technical_score"
-            ],
-            ascending=[
-                False,
-                False
-            ]
-        )
+            )
 
-        watchlist = (
-            watchlist
-            .drop_duplicates(
-                subset=[
-                    "symbol"
+        if sort_columns:
+
+            watchlist = watchlist.sort_values(
+                by=sort_columns,
+                ascending=[
+                    False
+                    for _ in sort_columns
                 ],
-                keep="first"
+                na_position="last"
             )
-            .reset_index(
-                drop=True
-            )
-        )
 
-        watchlists[name] = watchlist
+        if "symbol" in watchlist.columns:
+
+            watchlist = (
+                watchlist
+                .drop_duplicates(
+                    subset=[
+                        "symbol"
+                    ],
+                    keep="first"
+                )
+                .reset_index(
+                    drop=True
+                )
+            )
+
+        watchlists[
+            name
+        ] = watchlist
 
     return watchlists
 
@@ -2556,9 +3901,15 @@ def create_setup_summary(
 
     if total > 0:
 
-        summary["percentage"] = (
-            summary["stocks"] /
-            total *
+        summary[
+            "percentage"
+        ] = (
+            summary[
+                "stocks"
+            ]
+            /
+            total
+            *
             100
         )
 
@@ -2566,7 +3917,7 @@ def create_setup_summary(
 
 
 # ============================================================
-# FINAL CLEANUP
+# EXPORT CLEANUP
 # ============================================================
 
 def prepare_export_data(
@@ -2582,9 +3933,6 @@ def prepare_export_data(
         return data
 
     result = data.copy()
-
-    # Convert pandas nullable values to normal values
-    # where practical for CSV / Excel / JSON.
 
     for column in result.columns:
 
@@ -2610,27 +3958,19 @@ def prepare_export_data(
 if __name__ == "__main__":
 
     print()
+    print("=" * 70)
     print(
-        "=" * 70
+        "NSE SMART MARKET DASHBOARD V2.1"
     )
-
     print(
-        "NSE SMART MARKET DASHBOARD V2"
+        "RANKING + WATCHLIST + TRADE PLAN ENGINE"
     )
-
-    print(
-        "RANKING + WATCHLIST ENGINE"
-    )
-
     print(
         "Created by Rakesh Nagapuri"
     )
-
-    print(
-        "=" * 70
-    )
-
+    print("=" * 70)
     print()
+
     print(
         "Ranking engine loaded successfully."
     )
@@ -2699,46 +4039,31 @@ if __name__ == "__main__":
 
     print()
     print(
-        "Watchlists:"
+        "Trade Plan:"
     )
 
     print(
-        "  Next Day"
+        "  Entry Zone"
     )
 
     print(
-        "  Intraday Candidate"
+        "  Stop Loss"
     )
 
     print(
-        "  Equity Swing"
+        "  Target 1"
     )
 
     print(
-        "  Long Term"
+        "  Target 2"
     )
 
     print(
-        "  52W High"
+        "  Risk / Reward"
     )
 
     print(
-        "  200 DMA Recovery"
-    )
-
-    print(
-        "  Momentum"
-    )
-
-    print(
-        "  Breakout"
-    )
-
-    print(
-        "  Options Underlying"
+        "  Invalidation"
     )
 
     print()
-    print(
-        "=" * 70
-    )
