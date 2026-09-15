@@ -7,10 +7,15 @@ from engines.technical_engine import (
     get_latest_analysis
 )
 
+from engines.ranking_engine import (
+    rank_stocks,
+    create_setup_summary
+)
+
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# BATCH STOCK SCANNER
+# BATCH STOCK SCANNER + RANKING
 # ============================================================
 
 
@@ -19,7 +24,11 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "output"
 
 OUTPUT_FILE = (
-    OUTPUT_DIR / "technical_scan_test.csv"
+    OUTPUT_DIR / "technical_ranked_test.csv"
+)
+
+SUMMARY_FILE = (
+    OUTPUT_DIR / "setup_summary_test.csv"
 )
 
 
@@ -66,10 +75,6 @@ def download_stock_data(
 
             return pd.DataFrame()
 
-        # ----------------------------------------------------
-        # Handle MultiIndex returned by yfinance
-        # ----------------------------------------------------
-
         if isinstance(
             data.columns,
             pd.MultiIndex
@@ -98,7 +103,8 @@ def download_stock_data(
 
             print(
                 f"Missing columns for "
-                f"{symbol}: {missing_columns}"
+                f"{symbol}: "
+                f"{missing_columns}"
             )
 
             return pd.DataFrame()
@@ -183,6 +189,7 @@ def scan_stocks(symbols):
     ):
 
         print()
+
         print(
             f"[{number}/{total}] "
             f"{symbol}"
@@ -216,7 +223,7 @@ def scan_stocks(symbols):
 def create_dataframe(results):
     """
     Convert analysis results
-    into a dataframe.
+    into dataframe.
     """
 
     if not results:
@@ -226,10 +233,6 @@ def create_dataframe(results):
     df = pd.DataFrame(
         results
     )
-
-    # --------------------------------------------------------
-    # Put symbol first
-    # --------------------------------------------------------
 
     if "symbol" in df.columns:
 
@@ -245,25 +248,12 @@ def create_dataframe(results):
             columns
         ]
 
-    # --------------------------------------------------------
-    # Sort by technical strength
-    # --------------------------------------------------------
-
-    if "rsi14" in df.columns:
-
-        df = df.sort_values(
-            by="rsi14",
-            ascending=False
-        )
-
-    return df.reset_index(
-        drop=True
-    )
+    return df
 
 
 def save_results(df):
     """
-    Save scanner results.
+    Save ranked technical results.
     """
 
     OUTPUT_DIR.mkdir(
@@ -277,8 +267,9 @@ def save_results(df):
     )
 
     print()
+
     print(
-        f"Saved results to:"
+        f"Saved ranked results:"
     )
 
     print(
@@ -286,40 +277,57 @@ def save_results(df):
     )
 
 
-def display_results(df):
+def save_summary(summary):
     """
-    Display important fields
-    in GitHub Actions log.
+    Save setup summary.
+    """
+
+    if summary.empty:
+
+        return
+
+    summary.to_csv(
+        SUMMARY_FILE,
+        index=False
+    )
+
+    print()
+
+    print(
+        "Saved setup summary:"
+    )
+
+    print(
+        SUMMARY_FILE
+    )
+
+
+def display_rankings(df):
+    """
+    Display ranked stocks.
     """
 
     if df.empty:
 
         print(
-            "No results available."
+            "No ranking results."
         )
 
         return
 
     display_columns = [
+        "technical_rank",
         "symbol",
-        "price",
-        "daily_return_pct",
-        "sma20",
-        "sma50",
-        "sma200",
-        "rsi14",
-        "atr_percent",
-        "volume_ratio",
-        "52w_high",
-        "52w_low",
-        "distance_from_52w_high_pct",
-        "distance_from_200dma_pct",
-        "above_200dma",
-        "support",
-        "resistance",
+        "technical_score",
+        "setup",
         "trend",
         "momentum",
-        "breakout_status"
+        "rsi14",
+        "volume_ratio",
+        "distance_from_52w_high_pct",
+        "distance_from_200dma_pct",
+        "risk_reward",
+        "setup_reasons"
     ]
 
     available_columns = [
@@ -330,7 +338,7 @@ def display_results(df):
 
     print()
     print("=" * 60)
-    print("BATCH SCAN RESULTS")
+    print("STOCK RANKINGS")
     print("=" * 60)
 
     print()
@@ -339,6 +347,36 @@ def display_results(df):
         df[
             available_columns
         ].to_string(
+            index=False
+        )
+    )
+
+    print()
+    print("=" * 60)
+
+
+def display_setup_summary(summary):
+    """
+    Display setup counts.
+    """
+
+    if summary.empty:
+
+        print(
+            "No setup summary available."
+        )
+
+        return
+
+    print()
+    print("=" * 60)
+    print("SETUP SUMMARY")
+    print("=" * 60)
+
+    print()
+
+    print(
+        summary.to_string(
             index=False
         )
     )
@@ -357,30 +395,20 @@ def main():
     )
 
     print(
-        "BATCH STOCK SCANNER"
+        "RANKED STOCK SCANNER"
     )
 
     print("=" * 60)
 
-    print()
-
     # --------------------------------------------------------
-    # Scan test stocks
+    # Scan stocks
     # --------------------------------------------------------
 
     results = scan_stocks(
         TEST_STOCKS
     )
 
-    # --------------------------------------------------------
-    # Create dataframe
-    # --------------------------------------------------------
-
-    df = create_dataframe(
-        results
-    )
-
-    if df.empty:
+    if not results:
 
         print()
         print(
@@ -390,26 +418,75 @@ def main():
         return
 
     # --------------------------------------------------------
-    # Save results
+    # Create dataframe
     # --------------------------------------------------------
 
-    save_results(
-        df
+    df = create_dataframe(
+        results
     )
 
     # --------------------------------------------------------
-    # Display results
+    # Apply ranking engine
     # --------------------------------------------------------
-
-    display_results(
-        df
-    )
 
     print()
     print("=" * 60)
 
     print(
-        "BATCH SCANNER TEST COMPLETE"
+        "RUNNING RANKING ENGINE"
+    )
+
+    print("=" * 60)
+
+    ranked_df = rank_stocks(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Setup summary
+    # --------------------------------------------------------
+
+    summary = create_setup_summary(
+        ranked_df
+    )
+
+    # --------------------------------------------------------
+    # Save results
+    # --------------------------------------------------------
+
+    save_results(
+        ranked_df
+    )
+
+    save_summary(
+        summary
+    )
+
+    # --------------------------------------------------------
+    # Display rankings
+    # --------------------------------------------------------
+
+    display_rankings(
+        ranked_df
+    )
+
+    # --------------------------------------------------------
+    # Display setup summary
+    # --------------------------------------------------------
+
+    display_setup_summary(
+        summary
+    )
+
+    # --------------------------------------------------------
+    # Complete
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 60)
+
+    print(
+        "RANKED SCANNER TEST COMPLETE"
     )
 
     print("=" * 60)
