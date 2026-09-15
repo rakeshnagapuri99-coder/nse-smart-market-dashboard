@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run batch scanner
+      - name: Run ranked scanner
         run: |
           python scanner.py
 
@@ -33,14 +33,28 @@ jobs:
           echo "======================================"
           ls -lah output
 
-      - name: Show CSV preview
+      - name: Show ranked CSV preview
         run: |
           echo "======================================"
-          echo "TECHNICAL SCAN CSV"
+          echo "RANKED SCAN CSV"
           echo "======================================"
-          if [ -f output/technical_scan_test.csv ]; then
-            head -10 output/technical_scan_test.csv
+
+          if [ -f output/technical_ranked_test.csv ]; then
+            head -10 output/technical_ranked_test.csv
           else
-            echo "CSV file was not created"
+            echo "Ranked CSV file was not created"
+            exit 1
+          fi
+
+      - name: Show setup summary
+        run: |
+          echo "======================================"
+          echo "SETUP SUMMARY"
+          echo "======================================"
+
+          if [ -f output/setup_summary_test.csv ]; then
+            cat output/setup_summary_test.csv
+          else
+            echo "Setup summary file was not created"
             exit 1
           fi
