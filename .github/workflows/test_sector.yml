@@ -1,0 +1,45 @@
+name: Test Sector Engine
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Sector Engine
+        run: |
+          python engines/sector_engine.py
+
+      - name: Verify Sector Output
+        run: |
+          echo "======================================"
+          echo "SECTOR ANALYSIS OUTPUT"
+          echo "======================================"
+
+          if [ -f output/sector_analysis.csv ]; then
+            echo "✓ Sector analysis file created"
+            echo ""
+            echo "Total sectors:"
+            wc -l output/sector_analysis.csv
+            echo ""
+            echo "Sector analysis:"
+            cat output/sector_analysis.csv
+          else
+            echo "✗ Sector analysis CSV was not created"
+            exit 1
+          fi
