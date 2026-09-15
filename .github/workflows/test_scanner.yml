@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run ranked scanner
+      - name: Run market and ranked scanner
         run: |
           python scanner.py
 
@@ -33,10 +33,23 @@ jobs:
           echo "======================================"
           ls -lah output
 
+      - name: Show market regime
+        run: |
+          echo "======================================"
+          echo "MARKET REGIME"
+          echo "======================================"
+
+          if [ -f output/market_regime_test.csv ]; then
+            cat output/market_regime_test.csv
+          else
+            echo "Market regime file was not created"
+            exit 1
+          fi
+
       - name: Show ranked CSV preview
         run: |
           echo "======================================"
-          echo "RANKED SCAN CSV"
+          echo "RANKED STOCKS"
           echo "======================================"
 
           if [ -f output/technical_ranked_test.csv ]; then
