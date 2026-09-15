@@ -12,7 +12,7 @@
 
     <meta
         name="description"
-        content="NSE Smart Market Dashboard — Market Intelligence, Technical Analysis, Fundamentals and Stock Setups."
+        content="NSE Smart Market Dashboard - Market Intelligence, Technical Analysis, Fundamentals and Trading Setups"
     >
 
     <meta
@@ -21,7 +21,7 @@
     >
 
     <title>
-        NSE Smart Market Dashboard
+        NSE Smart Market Dashboard V2.1
     </title>
 
     <link
@@ -34,581 +34,281 @@
 
 <body>
 
-    <!-- ======================================================
-         HEADER
-         ====================================================== -->
 
-    <header class="dashboard-header">
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
 
-        <div class="header-container">
+<header class="dashboard-header">
 
-            <div class="header-brand">
+    <div class="header-inner">
 
-                <div class="brand-icon">
-                    NSE
-                </div>
+        <div class="brand-block">
 
-                <div>
-
-                    <h1>
-                        NSE SMART MARKET DASHBOARD
-                    </h1>
-
-                    <p>
-                        Market Intelligence
-                        <span>•</span>
-                        Technicals
-                        <span>•</span>
-                        Fundamentals
-                        <span>•</span>
-                        Setups
-                    </p>
-
-                </div>
-
+            <div class="brand-title">
+                NSE SMART
+                <span>MARKET DASHBOARD</span>
             </div>
 
+            <div class="brand-subtitle">
+                Market Intelligence • Technicals • Fundamentals • Setups
+            </div>
 
-            <div class="header-attribution">
+        </div>
 
+
+        <div class="header-meta">
+
+            <div class="live-indicator">
+                <span class="live-dot"></span>
+                MARKET DATA
+            </div>
+
+            <div
+                id="lastUpdated"
+                class="last-updated"
+            >
+                Loading data...
+            </div>
+
+            <div class="created-by">
                 Created by
-                <strong>
-                    Rakesh Nagapuri
-                </strong>
+                <strong>Rakesh Nagapuri</strong>
+            </div>
+
+        </div>
+
+    </div>
+
+</header>
+
+
+
+<!-- ============================================================
+     MAIN CONTAINER
+     ============================================================ -->
+
+<main class="dashboard-container">
+
+
+<!-- ============================================================
+     MARKET REGIME
+     ============================================================ -->
+
+<section
+    class="dashboard-section market-section"
+    id="marketSection"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                Market Context
+            </div>
+
+            <h2>
+                Market Regime
+            </h2>
+
+            <p>
+                Understand the market environment before selecting stocks.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div
+        id="marketRegime"
+        class="market-regime-main"
+    >
+
+        <div>
+
+            <div
+                id="marketRegimeBadge"
+                class="regime-badge regime-neutral"
+            >
+                Loading
+            </div>
+
+            <div
+                id="marketRegimeText"
+                class="regime-score"
+            >
+                Analysing market conditions...
+            </div>
+
+        </div>
+
+
+        <div
+            id="marketScore"
+            class="regime-score"
+        >
+            Market Score:
+            <strong>--</strong>
+        </div>
+
+    </div>
+
+
+
+    <!-- ========================================================
+         MARKET INDEX CARDS
+         ======================================================== -->
+
+    <div
+        id="marketIndexGrid"
+        class="market-index-grid"
+    >
+
+        <div class="market-index-card">
+
+            <h4>
+                NIFTY 50
+            </h4>
+
+            <div
+                id="niftyPrice"
+                class="index-price"
+            >
+                --
+            </div>
+
+            <div class="index-price-label">
+                Last Completed Close
+            </div>
+
+            <div
+                id="niftySecondary"
+                class="index-secondary"
+            >
+                --
+            </div>
+
+            <div
+                id="niftyMeta"
+                class="index-meta"
+            >
+
+                <span>
+                    Trend
+                    <strong>--</strong>
+                </span>
+
+                <span>
+                    Momentum
+                    <strong>--</strong>
+                </span>
+
+                <span>
+                    RSI
+                    <strong>--</strong>
+                </span>
 
             </div>
 
         </div>
 
-    </header>
 
 
-    <!-- ======================================================
-         MAIN CONTENT
-         ====================================================== -->
+        <div class="market-index-card">
 
-    <main class="dashboard-container">
-
-
-        <!-- ==================================================
-             MARKET REGIME
-             ================================================== -->
-
-        <section class="dashboard-section">
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Market Regime
-                    </h2>
-
-                    <p>
-                        Overall market environment before
-                        evaluating individual stocks.
-                    </p>
-
-                </div>
-
-                <span class="section-tag">
-                    Market Context
-                </span>
-
-            </div>
-
+            <h4>
+                BANK NIFTY
+            </h4>
 
             <div
-                id="marketRegime"
-                class="market-grid"
+                id="bankNiftyPrice"
+                class="index-price"
             >
-
-                <div class="loading-state">
-                    Loading market data...
-                </div>
-
+                --
             </div>
 
-        </section>
-
-
-
-        <!-- ==================================================
-             MARKET BREADTH
-             ================================================== -->
-
-        <section class="dashboard-section">
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Market Breadth
-                    </h2>
-
-                    <p>
-                        Breadth across the NSE equity universe.
-                    </p>
-
-                </div>
-
-                <span class="section-tag">
-                    NSE Universe
-                </span>
-
+            <div class="index-price-label">
+                Last Completed Close
             </div>
-
 
             <div
-                id="breadthCards"
-                class="breadth-grid"
+                id="bankNiftySecondary"
+                class="index-secondary"
             >
-
-                <div class="loading-state">
-                    Loading breadth...
-                </div>
-
+                --
             </div>
-
-        </section>
-
-
-
-        <!-- ==================================================
-             SECTOR STRENGTH
-             ================================================== -->
-
-        <section class="dashboard-section">
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Sector Strength
-                    </h2>
-
-                    <p>
-                        Relative technical strength across
-                        major sectors and themes.
-                    </p>
-
-                </div>
-
-                <span class="section-tag">
-                    Sector Analysis
-                </span>
-
-            </div>
-
 
             <div
-                id="sectorTable"
-                class="table-container"
+                id="bankNiftyMeta"
+                class="index-meta"
             >
-
-                <div class="loading-state">
-                    Loading sector analysis...
-                </div>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- ==================================================
-             WATCHLISTS
-             ================================================== -->
-
-        <section class="dashboard-section">
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Smart Watchlists
-                    </h2>
-
-                    <p>
-                        Stocks filtered according to the
-                        current market and technical setup.
-                    </p>
-
-                </div>
-
-                <div class="watchlist-header-info">
-
-                    <span class="section-tag">
-                        <span id="watchlistCount">
-                            0
-                        </span>
-                        Stocks
-                    </span>
-
-                </div>
-
-            </div>
-
-
-            <!-- WATCHLIST TABS -->
-
-            <div class="watchlist-tabs">
-
-                <button
-                    class="watchlist-tab active"
-                    data-watchlist="next_day"
-                    type="button"
-                >
-                    Next Day
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="intraday"
-                    type="button"
-                >
-                    Intraday
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="swing"
-                    type="button"
-                >
-                    Equity / Swing
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="long_term"
-                    type="button"
-                >
-                    Long-Term
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="52w_high"
-                    type="button"
-                >
-                    52W High
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="dma_recovery"
-                    type="button"
-                >
-                    200 DMA Recovery
-                </button>
-
-
-                <button
-                    class="watchlist-tab"
-                    data-watchlist="options"
-                    type="button"
-                >
-                    Options Watch
-                </button>
-
-            </div>
-
-
-            <!-- WATCHLIST TABLE -->
-
-            <div
-                id="stockTable"
-                class="table-container"
-            >
-
-                <div class="loading-state">
-                    Loading stock watchlist...
-                </div>
-
-            </div>
-
-
-            <div class="watchlist-disclaimer">
-
-                <strong>
-                    How to use:
-                </strong>
-
-                Watchlists identify stocks that currently
-                satisfy defined technical conditions.
-                They are not automatic buy or sell
-                recommendations.
-
-            </div>
-
-        </section>
-
-
-
-        <!-- ==================================================
-             PORTFOLIO BUILDER
-             ================================================== -->
-
-        <section
-            class="dashboard-section portfolio-section"
-        >
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Portfolio Builder
-                    </h2>
-
-                    <p>
-                        Build a model portfolio using stocks
-                        above the 200 DMA and close to their
-                        52-week highs.
-                    </p>
-
-                </div>
-
-                <span class="section-tag">
-                    Technical + Fundamental
-                </span>
-
-            </div>
-
-
-            <div id="portfolioBuilder">
-
-                <div class="loading-state">
-
-                    Loading portfolio builder...
-
-                </div>
-
-            </div>
-
-
-            <div class="portfolio-disclaimer">
-
-                <strong>
-                    Important:
-                </strong>
-
-                This is a model portfolio construction
-                tool, not investment advice. Expected gain
-                is a scenario estimate based on the
-                dashboard's technical setup and trend
-                characteristics. Actual returns can be
-                materially different.
-
-            </div>
-
-        </section>
-
-
-
-        <!-- ==================================================
-             DATA & METHODOLOGY
-             ================================================== -->
-
-        <section class="dashboard-section methodology-section">
-
-            <div class="section-header">
-
-                <div>
-
-                    <h2>
-                        Dashboard Methodology
-                    </h2>
-
-                    <p>
-                        How the dashboard interprets market
-                        and stock data.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="methodology-grid">
-
-
-                <div class="methodology-card">
-
-                    <div class="methodology-number">
-                        01
-                    </div>
-
-                    <h3>
-                        Market First
-                    </h3>
-
-                    <p>
-                        Market regime and breadth are evaluated
-                        before individual stock setups.
-                    </p>
-
-                </div>
-
-
-                <div class="methodology-card">
-
-                    <div class="methodology-number">
-                        02
-                    </div>
-
-                    <h3>
-                        Technical Analysis
-                    </h3>
-
-                    <p>
-                        Trend, momentum, RSI, volume, moving
-                        averages, ATR, support, resistance,
-                        breakouts and 52-week positioning are
-                        considered.
-                    </p>
-
-                </div>
-
-
-                <div class="methodology-card">
-
-                    <div class="methodology-number">
-                        03
-                    </div>
-
-                    <h3>
-                        Fundamentals
-                    </h3>
-
-                    <p>
-                        Fundamental quality is considered where
-                        reliable fundamental data is available.
-                    </p>
-
-                </div>
-
-
-                <div class="methodology-card">
-
-                    <div class="methodology-number">
-                        04
-                    </div>
-
-                    <h3>
-                        Explainable Setups
-                    </h3>
-
-                    <p>
-                        Stocks are classified into understandable
-                        setups instead of relying only on an
-                        unexplained numerical score.
-                    </p>
-
-                </div>
-
-
-            </div>
-
-        </section>
-
-
-
-        <!-- ==================================================
-             DATA STATUS
-             ================================================== -->
-
-        <section class="dashboard-section data-status-section">
-
-            <div class="data-status-panel">
-
-                <div>
-
-                    <span class="data-status-label">
-                        LAST MARKET UPDATE
-                    </span>
-
-                    <strong
-                        id="lastUpdated"
-                    >
-                        Waiting for market data...
-                    </strong>
-
-                </div>
-
-
-                <div class="data-source">
-
-                    Data generated automatically from the
-                    dashboard's production market scan.
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-    </main>
-
-
-
-    <!-- ======================================================
-         STOCK DETAIL MODAL
-         ====================================================== -->
-
-    <div
-        id="stockModal"
-        class="stock-modal"
-    >
-
-        <div class="stock-modal-content">
-
-
-            <div class="stock-modal-header">
-
-                <h2>
-                    Stock Analysis
-                </h2>
-
-                <button
-                    type="button"
-                    class="modal-close"
-                    aria-label="Close"
-                >
-                    &times;
-                </button>
-
-            </div>
-
-
-            <div
-                id="stockDetail"
-                class="stock-detail"
-            >
-
-                Loading stock analysis...
-
-            </div>
-
-
-            <div class="modal-footer">
 
                 <span>
-                    NSE Smart Market Dashboard
+                    Trend
+                    <strong>--</strong>
                 </span>
 
-                <strong>
-                    Created by Rakesh Nagapuri
-                </strong>
+                <span>
+                    Momentum
+                    <strong>--</strong>
+                </span>
+
+                <span>
+                    RSI
+                    <strong>--</strong>
+                </span>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="market-index-card">
+
+            <h4>
+                INDIA VIX
+            </h4>
+
+            <div
+                id="vixValue"
+                class="index-price"
+            >
+                --
+            </div>
+
+            <div class="index-price-label">
+                Volatility Indicator
+            </div>
+
+            <div
+                id="vixInterpretation"
+                class="index-secondary"
+            >
+                --
+            </div>
+
+            <div
+                id="vixMeta"
+                class="index-meta"
+            >
+
+                <span>
+                    Market
+                    <strong>--</strong>
+                </span>
+
+                <span>
+                    Risk
+                    <strong>--</strong>
+                </span>
+
+                <span>
+                    Mode
+                    <strong>--</strong>
+                </span>
 
             </div>
 
@@ -618,63 +318,720 @@
 
 
 
-    <!-- ======================================================
-         FOOTER
-         ====================================================== -->
+    <!-- ========================================================
+         ENVIRONMENT
+         ======================================================== -->
 
-    <footer class="dashboard-footer">
+    <div
+        id="marketEnvironmentGrid"
+        class="market-environment-grid"
+    >
 
-        <div class="footer-container">
+        <div class="environment-card">
+
+            <div class="environment-title">
+                Equity
+            </div>
+
+            <strong>
+                --
+            </strong>
+
+        </div>
 
 
-            <div class="footer-brand">
+        <div class="environment-card">
 
-                <strong>
-                    NSE SMART MARKET DASHBOARD
-                </strong>
+            <div class="environment-title">
+                Swing
+            </div>
+
+            <strong>
+                --
+            </strong>
+
+        </div>
+
+
+        <div class="environment-card">
+
+            <div class="environment-title">
+                Breakout
+            </div>
+
+            <strong>
+                --
+            </strong>
+
+        </div>
+
+
+        <div class="environment-card">
+
+            <div class="environment-title">
+                Intraday
+            </div>
+
+            <strong>
+                --
+            </strong>
+
+        </div>
+
+
+        <div class="environment-card">
+
+            <div class="environment-title">
+                Options
+            </div>
+
+            <strong>
+                --
+            </strong>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ========================================================
+         MARKET ANALYSIS
+         ======================================================== -->
+
+    <div
+        id="marketAnalysis"
+        class="market-analysis-panel"
+    >
+
+        <div class="section-heading">
+
+            <h3>
+                Next-Day Market Analysis
+            </h3>
+
+            <span>
+                Structure-based scenario
+            </span>
+
+        </div>
+
+
+        <div
+            id="marketAnalysisGrid"
+            class="market-analysis-grid"
+        >
+
+            <div class="analysis-metric">
 
                 <span>
-                    Created by Rakesh Nagapuri
+                    Pivot
                 </span>
+
+                <strong>
+                    --
+                </strong>
 
             </div>
 
 
-            <div class="footer-disclaimer">
+            <div class="analysis-metric">
+
+                <span>
+                    Support
+                </span>
 
                 <strong>
-                    Disclaimer:
+                    --
                 </strong>
 
-                This dashboard is for educational,
-                analytical and informational purposes only.
-                It does not constitute investment advice,
-                a recommendation, solicitation or guarantee
-                of returns. Market data may be delayed,
-                incomplete or unavailable. Always perform
-                your own due diligence before making any
-                investment or trading decision.
+            </div>
+
+
+            <div class="analysis-metric">
+
+                <span>
+                    Resistance
+                </span>
+
+                <strong>
+                    --
+                </strong>
+
+            </div>
+
+
+            <div class="analysis-metric">
+
+                <span>
+                    Bullish Trigger
+                </span>
+
+                <strong>
+                    --
+                </strong>
+
+            </div>
+
+
+            <div class="analysis-metric">
+
+                <span>
+                    Bearish Trigger
+                </span>
+
+                <strong>
+                    --
+                </strong>
 
             </div>
 
         </div>
 
-    </footer>
+
+        <div
+            id="marketScenario"
+            class="market-scenario"
+        >
+
+            <strong>
+                Scenario
+            </strong>
+
+            <p>
+                Market scenario will appear after the latest analysis is loaded.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
 
 
 
-    <!-- ======================================================
-         JAVASCRIPT
-         ====================================================== -->
+<!-- ============================================================
+     MARKET BREADTH
+     ============================================================ -->
 
-    <script
-        src="assets/dashboard.js"
-    ></script>
+<section
+    class="dashboard-section breadth-section"
+    id="breadthSection"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                Market Participation
+            </div>
+
+            <h2>
+                Market Breadth
+            </h2>
+
+            <p>
+                Measure how broadly the market is participating in the current trend.
+            </p>
+
+        </div>
+
+    </div>
 
 
-    <script
-        src="assets/portfolio.js"
-    ></script>
+    <div id="breadthCards">
+
+        <div class="loading-state">
+            Loading breadth...
+        </div>
+
+    </div>
+
+</section>
+
+
+
+<!-- ============================================================
+     SECTOR ANALYSIS
+     ============================================================ -->
+
+<section
+    class="dashboard-section sector-section"
+    id="sectorSection"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                Sector Rotation
+            </div>
+
+            <h2>
+                Sector Analysis
+            </h2>
+
+            <p>
+                Compare sector trend, momentum and relative strength.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table
+            class="dashboard-table"
+            id="sectorTable"
+        >
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Rank
+                    </th>
+
+                    <th>
+                        Sector
+                    </th>
+
+                    <th>
+                        Price
+                    </th>
+
+                    <th>
+                        Trend
+                    </th>
+
+                    <th>
+                        Momentum
+                    </th>
+
+                    <th>
+                        20D %
+                    </th>
+
+                    <th>
+                        Score
+                    </th>
+
+                    <th>
+                        View
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                <tr>
+
+                    <td
+                        colspan="8"
+                        class="loading-state"
+                    >
+                        Loading sectors...
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+
+<!-- ============================================================
+     STOCK WATCHLISTS
+     ============================================================ -->
+
+<section
+    class="dashboard-section watchlist-section"
+    id="watchlistSection"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                Stock Intelligence
+            </div>
+
+            <h2>
+                Smart Watchlists
+            </h2>
+
+            <p>
+                Ranked stocks based on technicals, fundamentals, market regime and setup quality.
+            </p>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ========================================================
+         WATCHLIST TABS
+         ======================================================== -->
+
+    <div
+        id="watchlistTabs"
+        class="watchlist-tabs"
+    >
+
+        <button
+            class="watchlist-tab active"
+            data-watchlist="next_day"
+            type="button"
+        >
+            Next Day
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="intraday"
+            type="button"
+        >
+            Intraday
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="swing"
+            type="button"
+        >
+            Equity Swing
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="long_term"
+            type="button"
+        >
+            Long Term
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="52w_high"
+            type="button"
+        >
+            52W High
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="dma_recovery"
+            type="button"
+        >
+            200 DMA Recovery
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="momentum"
+            type="button"
+        >
+            Momentum
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="breakout"
+            type="button"
+        >
+            Breakout
+        </button>
+
+        <button
+            class="watchlist-tab"
+            data-watchlist="options"
+            type="button"
+        >
+            Options Watch
+        </button>
+
+    </div>
+
+
+
+    <!-- ========================================================
+         WATCHLIST TOOLBAR
+         ======================================================== -->
+
+    <div class="watchlist-toolbar">
+
+        <div
+            id="watchlistCount"
+            class="watchlist-count"
+        >
+            Loading...
+        </div>
+
+        <div>
+
+            <button
+                id="downloadWatchlist"
+                class="download-button"
+                type="button"
+            >
+                Export Excel
+            </button>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ========================================================
+         STOCK TABLE
+         ======================================================== -->
+
+    <div class="table-wrapper">
+
+        <table
+            class="dashboard-table stock-table"
+            id="stockTable"
+        >
+
+            <thead>
+
+                <tr>
+
+                    <th>
+                        Rank
+                    </th>
+
+                    <th>
+                        Stock
+                    </th>
+
+                    <th>
+                        Price
+                    </th>
+
+                    <th>
+                        Change
+                    </th>
+
+                    <th>
+                        Score
+                    </th>
+
+                    <th>
+                        Setup
+                    </th>
+
+                    <th>
+                        Entry
+                    </th>
+
+                    <th>
+                        Stop Loss
+                    </th>
+
+                    <th>
+                        Target 1
+                    </th>
+
+                    <th>
+                        Target 2
+                    </th>
+
+                    <th>
+                        R:R
+                    </th>
+
+                    <th>
+                        Trend
+                    </th>
+
+                    <th>
+                        Momentum
+                    </th>
+
+                    <th>
+                        RSI
+                    </th>
+
+                    <th>
+                        Volume
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                <tr>
+
+                    <td
+                        colspan="15"
+                        class="loading-state"
+                    >
+                        Loading stocks...
+                    </td>
+
+                </tr>
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+
+    <div class="table-note">
+
+        Click any stock to open the detailed technical,
+        fundamental and trade-plan view.
+
+    </div>
+
+</section>
+
+
+
+<!-- ============================================================
+     PORTFOLIO BUILDER
+     ============================================================ -->
+
+<section
+    class="dashboard-section portfolio-section"
+    id="portfolioSection"
+>
+
+    <div class="section-title-row">
+
+        <div>
+
+            <div class="section-kicker">
+                Capital Allocation
+            </div>
+
+            <h2>
+                Portfolio Builder
+            </h2>
+
+            <p>
+                Build a diversified portfolio using the dashboard's ranked trade plans.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div
+        id="portfolioBuilder"
+        class="portfolio-builder"
+    >
+
+        <div class="loading-state">
+            Loading Portfolio Builder...
+        </div>
+
+    </div>
+
+</section>
+
+
+
+</main>
+
+
+
+<!-- ============================================================
+     STOCK DETAIL MODAL
+     ============================================================ -->
+
+<div
+    id="stockModal"
+    class="stock-modal"
+    aria-hidden="true"
+>
+
+    <div class="stock-modal-content">
+
+        <button
+            id="stockModalClose"
+            class="stock-modal-close"
+            type="button"
+            aria-label="Close"
+        >
+            ×
+        </button>
+
+
+        <div
+            id="stockDetail"
+            class="stock-detail"
+        >
+
+            <div class="loading-state">
+                Loading stock details...
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+
+<footer class="dashboard-footer">
+
+    <div>
+        NSE Smart Market Dashboard V2.1
+    </div>
+
+    <div>
+        Created by
+        <strong>Rakesh Nagapuri</strong>
+    </div>
+
+    <div>
+        For research and educational purposes only.
+        Not investment advice.
+    </div>
+
+</footer>
+
+
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+
+<script
+    src="assets/dashboard.js"
+></script>
+
+<script
+    src="assets/portfolio.js"
+></script>
 
 
 </body>
