@@ -16,10 +16,19 @@ from engines.market_engine import (
     get_market_regime
 )
 
+from engines.nse_universe import (
+    get_nse_universe
+)
+
+from engines.market_breadth import (
+    get_market_breadth,
+    display_breadth
+)
+
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# MARKET + STOCK RANKING ENGINE
+# MARKET + BREADTH + STOCK RANKING ENGINE
 # ============================================================
 
 
@@ -90,10 +99,6 @@ def analyze_market():
         f"{overall.get('market_score', 0):.2f}"
     )
 
-    # --------------------------------------------------------
-    # NIFTY
-    # --------------------------------------------------------
-
     nifty = market.get(
         "NIFTY 50",
         {}
@@ -129,10 +134,6 @@ def analyze_market():
             f"{nifty.get('market_score', 0):.2f}"
         )
 
-    # --------------------------------------------------------
-    # BANK NIFTY
-    # --------------------------------------------------------
-
     banknifty = market.get(
         "BANK NIFTY",
         {}
@@ -167,10 +168,6 @@ def analyze_market():
             f"Score       : "
             f"{banknifty.get('market_score', 0):.2f}"
         )
-
-    # --------------------------------------------------------
-    # INDIA VIX
-    # --------------------------------------------------------
 
     vix = market.get(
         "INDIA VIX",
@@ -230,7 +227,7 @@ def save_market_data(market):
 
     print()
     print(
-        f"Saved market data:"
+        "Saved market data:"
     )
 
     print(
@@ -615,6 +612,53 @@ def display_setup_summary(summary):
 
 
 # ============================================================
+# MARKET BREADTH
+# ============================================================
+
+def analyze_breadth():
+
+    print()
+    print("=" * 60)
+    print("RUNNING MARKET BREADTH ENGINE")
+    print("=" * 60)
+
+    universe = get_nse_universe()
+
+    if universe.empty:
+
+        print(
+            "NSE universe unavailable."
+        )
+
+        return {}
+
+    print()
+
+    print(
+        f"NSE Universe: "
+        f"{len(universe)} securities"
+    )
+
+    breadth = get_market_breadth(
+        universe
+    )
+
+    if not breadth:
+
+        print(
+            "Market breadth calculation failed."
+        )
+
+        return {}
+
+    display_breadth(
+        breadth
+    )
+
+    return breadth
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -628,7 +672,7 @@ def main():
     )
 
     print(
-        "MARKET + STOCK RANKING TEST"
+        "MARKET + BREADTH + STOCK RANKING"
     )
 
     print("=" * 60)
@@ -648,7 +692,13 @@ def main():
     )
 
     # --------------------------------------------------------
-    # STEP 2 — STOCKS
+    # STEP 2 — MARKET BREADTH
+    # --------------------------------------------------------
+
+    breadth = analyze_breadth()
+
+    # --------------------------------------------------------
+    # STEP 3 — TEST STOCKS
     # --------------------------------------------------------
 
     results = scan_stocks(
@@ -665,7 +715,7 @@ def main():
         return
 
     # --------------------------------------------------------
-    # STEP 3 — DATAFRAME
+    # STEP 4 — DATAFRAME
     # --------------------------------------------------------
 
     df = create_dataframe(
@@ -673,7 +723,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # STEP 4 — RANKING
+    # STEP 5 — RANKING
     # --------------------------------------------------------
 
     print()
@@ -690,7 +740,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # STEP 5 — SETUP SUMMARY
+    # STEP 6 — SETUP SUMMARY
     # --------------------------------------------------------
 
     summary = create_setup_summary(
@@ -698,7 +748,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # STEP 6 — SAVE
+    # STEP 7 — SAVE
     # --------------------------------------------------------
 
     save_ranked_results(
@@ -710,7 +760,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # STEP 7 — DISPLAY
+    # STEP 8 — DISPLAY
     # --------------------------------------------------------
 
     display_rankings(
@@ -729,7 +779,7 @@ def main():
     print("=" * 60)
 
     print(
-        "MARKET + STOCK RANKING TEST COMPLETE"
+        "MARKET + BREADTH + STOCK RANKING TEST COMPLETE"
     )
 
     print("=" * 60)
