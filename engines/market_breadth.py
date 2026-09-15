@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -24,9 +23,13 @@ BREADTH_FILE = (
 # SETTINGS
 # ============================================================
 
-DOWNLOAD_PERIOD = "1y"
+DOWNLOAD_PERIOD = "2y"
 
 BATCH_SIZE = 100
+
+# A stock within 1% of its 52-week high/low
+# is considered to be at the extreme.
+EXTREME_THRESHOLD = 1.0
 
 
 # ============================================================
@@ -79,7 +82,8 @@ def analyze_stock_data(
             subset=["Close"]
         )
 
-        if len(stock_data) < 50:
+        # Need enough history for 200 DMA
+        if len(stock_data) < 200:
             return None
 
         close = stock_data["Close"]
@@ -119,33 +123,60 @@ def analyze_stock_data(
 
         # ----------------------------------------------------
         # 52 Week High / Low
+        #
+        # Use previous 252 sessions.
+        # Current day is excluded so that a genuine breakout
+        # can be detected later.
         # ----------------------------------------------------
 
-        high_52w = (
+        previous_52w_high = (
             high
             .rolling(252)
             .max()
+            .shift(1)
             .iloc[-1]
         )
 
-        low_52w = (
+        previous_52w_low = (
             low
             .rolling(252)
             .min()
+            .shift(1)
             .iloc[-1]
         )
 
+        if (
+            pd.isna(previous_52w_high)
+            or pd.isna(previous_52w_low)
+        ):
+            return None
+
         # ----------------------------------------------------
-        # Validity
+        # Distance from 52W High / Low
         # ----------------------------------------------------
 
-        if pd.isna(sma50):
-            return None
+        distance_from_high = (
+            (
+                latest_close
+                - previous_52w_high
+            )
+            / previous_52w_high
+        ) * 100
+
+        distance_from_low = (
+            (
+                latest_close
+                - previous_52w_low
+            )
+            / previous_52w_low
+        ) * 100
+
+        # ----------------------------------------------------
+        # Moving average position
+        # ----------------------------------------------------
 
         above_20 = (
             latest_close > sma20
-            if not pd.isna(sma20)
-            else False
         )
 
         above_50 = (
@@ -154,20 +185,33 @@ def analyze_stock_data(
 
         above_200 = (
             latest_close > sma200
-            if not pd.isna(sma200)
-            else False
         )
 
+        # ----------------------------------------------------
+        # 52W extremes
+        #
+        # High:
+        # Close is at/above previous 52W high
+        #
+        # Low:
+        # Close is within 1% of previous 52W low
+        # ----------------------------------------------------
+
         at_52w_high = (
-            latest_close >= high_52w
-            if not pd.isna(high_52w)
-            else False
+            latest_close
+            >= previous_52w_high
         )
 
         at_52w_low = (
-            latest_close <= low_52w
-            if not pd.isna(low_52w)
-            else False
+            latest_close
+            <= (
+                previous_52w_low
+                * (
+                    1
+                    + EXTREME_THRESHOLD
+                    / 100
+                )
+            )
         )
 
         return {
@@ -188,9 +232,23 @@ def analyze_stock_data(
 
             "above_200dma": above_200,
 
-            "52w_high": high_52w,
+            "52w_high": previous_52w_high,
 
-            "52w_low": low_52w,
+            "52w_low": previous_52w_low,
+
+            "distance_from_52w_high_pct": (
+                round(
+                    distance_from_high,
+                    2
+                )
+            ),
+
+            "distance_from_52w_low_pct": (
+                round(
+                    distance_from_low,
+                    2
+                )
+            ),
 
             "at_52w_high": at_52w_high,
 
@@ -232,7 +290,7 @@ def analyze_universe(universe):
     print("=" * 60)
 
     print(
-        f"MARKET BREADTH SCAN"
+        "MARKET BREADTH SCAN"
     )
 
     print(
@@ -309,8 +367,11 @@ def analyze_universe(universe):
                     )
                 ):
 
-                    if symbol not in data.columns.get_level_values(0):
-
+                    if (
+                        symbol
+                        not in
+                        data.columns.get_level_values(0)
+                    ):
                         continue
 
                     stock_data = (
@@ -397,31 +458,96 @@ def calculate_market_breadth(
         ].sum()
     )
 
+    # --------------------------------------------------------
+    # Percentages
+    # --------------------------------------------------------
+
+    pct_above_20 = (
+        above_20
+        / total
+        * 100
+    )
+
+    pct_above_50 = (
+        above_50
+        / total
+        * 100
+    )
+
+    pct_above_200 = (
+        above_200
+        / total
+        * 100
+    )
+
+    pct_highs = (
+        highs
+        / total
+        * 100
+    )
+
+    pct_lows = (
+        lows
+        / total
+        * 100
+    )
+
+    # --------------------------------------------------------
+    # High / Low Ratio
+    # --------------------------------------------------------
+
     high_low_ratio = (
         highs / lows
         if lows > 0
         else np.inf
     )
 
+    # --------------------------------------------------------
+    # Breadth Score
+    #
+    # Components:
+    #
+    # 20 DMA     = 20%
+    # 50 DMA     = 30%
+    # 200 DMA    = 30%
+    # 52W Highs  = 10%
+    # 52W Lows   = -10%
+    #
+    # Score remains 0-100.
+    # --------------------------------------------------------
+
     breadth_score = (
         (
-            above_20 / total
+            pct_above_20
+            / 100
         ) * 20
+
         +
+
         (
-            above_50 / total
+            pct_above_50
+            / 100
         ) * 30
+
         +
+
         (
-            above_200 / total
+            pct_above_200
+            / 100
         ) * 30
+
         +
+
         (
-            highs / total
+            pct_highs
+            / 100
         ) * 10
+
         -
+
         (
-            lows / total
+            pct_lows
+            / 100
         ) * 10
     )
 
@@ -430,7 +556,7 @@ def calculate_market_breadth(
             0,
             min(
                 100,
-                breadth_score * 100
+                breadth_score
             )
         ),
         2
@@ -440,15 +566,15 @@ def calculate_market_breadth(
     # Breadth interpretation
     # --------------------------------------------------------
 
-    if breadth_score >= 70:
+    if breadth_score >= 65:
 
         breadth_regime = "Strong"
 
-    elif breadth_score >= 55:
+    elif breadth_score >= 52:
 
         breadth_regime = "Positive"
 
-    elif breadth_score >= 45:
+    elif breadth_score >= 42:
 
         breadth_regime = "Neutral"
 
@@ -471,23 +597,17 @@ def calculate_market_breadth(
         "above_200dma": above_200,
 
         "pct_above_20dma": round(
-            above_20
-            / total
-            * 100,
+            pct_above_20,
             2
         ),
 
         "pct_above_50dma": round(
-            above_50
-            / total
-            * 100,
+            pct_above_50,
             2
         ),
 
         "pct_above_200dma": round(
-            above_200
-            / total
-            * 100,
+            pct_above_200,
             2
         ),
 
@@ -545,7 +665,7 @@ def save_stock_analysis(
     print()
 
     print(
-        f"Saved stock breadth data:"
+        "Saved stock breadth data:"
     )
 
     print(
