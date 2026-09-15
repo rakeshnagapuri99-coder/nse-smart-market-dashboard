@@ -1,10 +1,8 @@
-watchlist,setup,stocks
-next_day,Next Day,141
-intraday,Intraday,94
-swing,Swing,1004
-long_term,Long Term,487
-52w_high,52W High,84
-dma_recovery,Dma Recovery,164
-momentum,Momentum,449
-breakout,Breakout,107
-options,Options,620
+Setup,Count
+Weak / Avoid,879
+Neutral Watch,514
+Momentum Watch,321
+200 DMA Recovery Watch,231
+52W High Watch,109
+Pre-Breakout Watch,100
+Strong Breakout Watch,52
