@@ -1,1826 +1,217 @@
-"""
-===========================================================
-NSE SMART MARKET DASHBOARD
-TECHNICAL ENGINE V3
-===========================================================
-
-Purpose
--------
-Calculates technical indicators for NSE equity stocks.
-
-Indicators
-----------
-    Previous Close
-    Daily Return %
-    SMA 20
-    SMA 50
-    SMA 100
-    SMA 200
-    EMA 9
-    EMA 20
-    EMA 50
-    RSI 14
-    ATR 14
-    ATR %
-    Volume
-    Average Volume 20
-    Volume Ratio
-    52 Week High
-    52 Week Low
-    Distance from 52 Week High
-    Distance from 52 Week Low
-    Distance from 200 DMA
-    Above 200 DMA
-    Support
-    Resistance
-    Trend
-    Momentum
-    Breakout Status
-    Technical Score
-
-Important
----------
-This module is defensive against:
-
-    yfinance MultiIndex columns
-    lowercase columns
-    Yahoo Finance column naming
-    missing OHLCV data
-    malformed symbols
-    empty DataFrames
-
-===========================================================
-"""
-
-from __future__ import annotations
-
-from typing import Any
-
+from pathlib import Path
+import time
 import numpy as np
 import pandas as pd
+import yfinance as yf
 
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(exist_ok=True)
 
-# =========================================================
-# CONSTANTS
-# =========================================================
+def _flatten_yf(df, ticker):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    x = df.copy()
+    if isinstance(x.columns, pd.MultiIndex):
+        # Handle both (Price, Ticker) and (Ticker, Price).
+        levels = [list(map(str, x.columns.get_level_values(i))) for i in range(x.columns.nlevels)]
+        selected = None
+        for level in range(x.columns.nlevels):
+            if ticker in levels[level]:
+                selected = x.xs(ticker, axis=1, level=level)
+                break
+        if selected is not None:
+            x = selected
+        else:
+            # Single ticker sometimes has one ticker level that differs in formatting.
+            x.columns = [str(c[-1]) if isinstance(c, tuple) else str(c) for c in x.columns]
+    x.columns = [str(c).strip().lower().replace("adj close","adj_close") for c in x.columns]
+    x = x.reset_index()
+    date_col = "date" if "date" in x.columns else x.columns[0]
+    x["date"] = pd.to_datetime(x[date_col], errors="coerce", utc=True).dt.tz_localize(None)
+    for c in ["open","high","low","close","volume"]:
+        if c in x.columns:
+            x[c] = pd.to_numeric(x[c], errors="coerce")
+    required = {"date","open","high","low","close","volume"}
+    if not required.issubset(x.columns):
+        return pd.DataFrame()
+    return x.dropna(subset=["date","close"]).sort_values("date").drop_duplicates("date")
 
-MIN_DATA_POINTS = 220
+def _rsi(s, n=14):
+    d = s.diff()
+    gain = d.clip(lower=0)
+    loss = -d.clip(upper=0)
+    ag = gain.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+    al = loss.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+    rs = ag / al.replace(0, np.nan)
+    return 100 - 100/(1+rs)
 
-SMA_SHORT = 20
-SMA_MEDIUM = 50
-SMA_LONG = 100
-SMA_200 = 200
+def _atr(x, n=14):
+    pc = x["close"].shift(1)
+    tr = pd.concat([
+        x["high"]-x["low"],
+        (x["high"]-pc).abs(),
+        (x["low"]-pc).abs()
+    ], axis=1).max(axis=1)
+    return tr.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
 
-EMA_FAST = 9
-EMA_SHORT = 20
-EMA_MEDIUM = 50
+def _analyse(ticker, raw):
+    x = _flatten_yf(raw, ticker)
+    if len(x) < 220:
+        return None
 
-RSI_PERIOD = 14
-ATR_PERIOD = 14
+    x["sma20"] = x.close.rolling(20).mean()
+    x["sma50"] = x.close.rolling(50).mean()
+    x["sma100"] = x.close.rolling(100).mean()
+    x["sma200"] = x.close.rolling(200).mean()
+    x["ema9"] = x.close.ewm(span=9, adjust=False).mean()
+    x["ema20"] = x.close.ewm(span=20, adjust=False).mean()
+    x["ema50"] = x.close.ewm(span=50, adjust=False).mean()
+    x["rsi14"] = _rsi(x.close)
+    x["atr14"] = _atr(x)
+    x["vol20"] = x.volume.rolling(20).mean()
+    x["volume_ratio"] = x.volume / x.vol20.replace(0, np.nan)
+    x["high52w"] = x.high.rolling(252, min_periods=100).max()
+    x["low52w"] = x.low.rolling(252, min_periods=100).min()
+    x["resistance20"] = x.high.shift(1).rolling(20).max()
+    x["support20"] = x.low.shift(1).rolling(20).min()
+    x["pivot"] = (x.high.shift(1)+x.low.shift(1)+x.close.shift(1))/3
+    x["return5"] = x.close.pct_change(5)*100
+    x["return20"] = x.close.pct_change(20)*100
+    x["return60"] = x.close.pct_change(60)*100
+    x["distance200"] = (x.close/x.sma200-1)*100
+    x["distance52high"] = (x.close/x.high52w-1)*100
 
-VOLUME_PERIOD = 20
-HIGH_LOW_PERIOD = 252
+    cur = x.iloc[-1]
+    prev = x.iloc[-2]
+    if pd.isna(cur.sma200):
+        return None
 
-SUPPORT_PERIOD = 20
-RESISTANCE_PERIOD = 20
+    cross_down = (x.close.shift(1) > x.sma200.shift(1)) & (x.close <= x.sma200)
+    recent_cross = cross_down.tail(90).any()
+    above200 = bool(cur.close >= cur.sma200)
+    near200 = abs(float(cur.distance200)) <= 3
 
-
-# =========================================================
-# GENERAL HELPERS
-# =========================================================
-
-def safe_float(
-    value: Any,
-    default: float | None = None,
-) -> float | None:
-
-    if value is None:
-        return default
-
-    try:
-
-        if pd.isna(value):
-            return default
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        pass
-
-    try:
-
-        number = float(value)
-
-        if not np.isfinite(number):
-            return default
-
-        return number
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-
-        return default
-
-
-def clamp(
-    value: float,
-    minimum: float = 0.0,
-    maximum: float = 100.0,
-) -> float:
-
-    return max(
-        minimum,
-        min(
-            maximum,
-            value,
-        ),
+    breakout = bool(
+        not pd.isna(cur.resistance20) and cur.close > cur.resistance20
+        and cur.volume_ratio >= 1.2
+    )
+    near_breakout = bool(
+        not pd.isna(cur.resistance20) and cur.close >= cur.resistance20*0.98
+    )
+    trend_score = (
+        (cur.close > cur.sma20) + (cur.sma20 > cur.sma50) +
+        (cur.sma50 > cur.sma200) + (cur.ema20 > cur.ema50)
+    ) * 25
+    momentum_score = np.clip(
+        50 + cur.return20*2 + cur.return60*0.8, 0, 100
+    )
+    rsi_score = 100 - abs(cur.rsi14-58)*2 if not pd.isna(cur.rsi14) else 50
+    rsi_score = float(np.clip(rsi_score, 0, 100))
+    volume_score = float(np.clip(50 + (cur.volume_ratio-1)*35, 0, 100))
+    position_score = float(np.clip(50 + cur.distance200*8, 0, 100))
+    breakout_score = 100 if breakout else (75 if near_breakout else 35)
+    technical_score = (
+        trend_score*.20 + momentum_score*.15 + rsi_score*.15 +
+        volume_score*.15 + position_score*.15 + breakout_score*.20
     )
 
-
-# =========================================================
-# COLUMN NORMALIZATION
-# =========================================================
-
-def _normalise_column_name(
-    column: Any,
-) -> str:
-
-    text = str(
-        column
-    ).strip()
-
-    text = text.replace(
-        "_",
-        " ",
-    )
-
-    text = " ".join(
-        text.split()
-    )
-
-    return text.lower()
-
-
-def normalize_ohlcv_columns(
-    data: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Convert yfinance / Yahoo columns into:
-
-        Open
-        High
-        Low
-        Close
-        Adj Close
-        Volume
-
-    Handles MultiIndex DataFrames.
-    """
-
-    if data is None:
-
-        return pd.DataFrame()
-
-    if not isinstance(
-        data,
-        pd.DataFrame,
-    ):
-
-        return pd.DataFrame()
-
-    if data.empty:
-
-        return pd.DataFrame()
-
-    df = data.copy()
-
-    # -----------------------------------------------------
-    # Handle MultiIndex columns.
-    #
-    # Examples:
-    #
-    # ('Close', 'RELIANCE.NS')
-    # ('RELIANCE.NS', 'Close')
-    #
-    # We search every level for the OHLCV field.
-    # -----------------------------------------------------
-
-    if isinstance(
-        df.columns,
-        pd.MultiIndex,
-    ):
-
-        new_columns = []
-
-        for column in df.columns:
-
-            selected = None
-
-            for part in column:
-
-                name = _normalise_column_name(
-                    part
-                )
-
-                if name in {
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "adj close",
-                    "volume",
-                }:
-
-                    selected = name
-                    break
-
-            if selected is None:
-
-                selected = "_".join(
-                    str(part)
-                    for part in column
-                )
-
-            new_columns.append(
-                selected
-            )
-
-        df.columns = new_columns
-
+    if breakout:
+        setup = "Strong Breakout Watch"
+    elif near_breakout:
+        setup = "Pre-Breakout Watch"
+    elif recent_cross and near200:
+        setup = "200 DMA Recovery Watch"
+    elif cur.distance52high >= -5:
+        setup = "52W High Watch"
+    elif momentum_score >= 70:
+        setup = "Momentum Watch"
+    elif technical_score < 40:
+        setup = "Weak / Avoid"
     else:
-
-        df.columns = [
-            _normalise_column_name(
-                column
-            )
-            for column
-            in df.columns
-        ]
-
-    # -----------------------------------------------------
-    # Rename standard columns.
-    # -----------------------------------------------------
-
-    rename_map = {}
-
-    for column in df.columns:
-
-        name = _normalise_column_name(
-            column
-        )
-
-        if name == "open":
-            rename_map[column] = "Open"
-
-        elif name == "high":
-            rename_map[column] = "High"
-
-        elif name == "low":
-            rename_map[column] = "Low"
-
-        elif name == "close":
-            rename_map[column] = "Close"
-
-        elif name == "adj close":
-            rename_map[column] = "Adj Close"
-
-        elif name == "volume":
-            rename_map[column] = "Volume"
-
-    df = df.rename(
-        columns=rename_map
-    )
-
-    # -----------------------------------------------------
-    # If duplicate columns exist after flattening,
-    # keep the first usable one.
-    # -----------------------------------------------------
-
-    for column in [
-        "Open",
-        "High",
-        "Low",
-        "Close",
-        "Adj Close",
-        "Volume",
-    ]:
-
-        matching = [
-            c
-            for c in df.columns
-            if c == column
-        ]
-
-        if len(matching) > 1:
-
-            df[column] = (
-                df[matching]
-                .bfill(axis=1)
-                .iloc[:, 0]
-            )
-
-    # -----------------------------------------------------
-    # Numeric conversion.
-    # -----------------------------------------------------
-
-    for column in [
-        "Open",
-        "High",
-        "Low",
-        "Close",
-        "Adj Close",
-        "Volume",
-    ]:
-
-        if column in df.columns:
-
-            df[column] = pd.to_numeric(
-                df[column],
-                errors="coerce",
-            )
-
-    # -----------------------------------------------------
-    # Sort and remove duplicate dates.
-    # -----------------------------------------------------
-
-    try:
-
-        df = df.sort_index()
-
-        if df.index.duplicated().any():
-
-            df = df[
-                ~df.index.duplicated(
-                    keep="last"
-                )
-            ]
-
-    except Exception:
-        pass
-
-    return df
-
-
-# =========================================================
-# RSI
-# =========================================================
-
-def calculate_rsi(
-    series: pd.Series,
-    period: int = RSI_PERIOD,
-) -> pd.Series:
-
-    delta = series.diff()
-
-    gain = delta.clip(
-        lower=0
-    )
-
-    loss = -delta.clip(
-        upper=0
-    )
-
-    average_gain = (
-        gain
-        .ewm(
-            alpha=1 / period,
-            adjust=False,
-            min_periods=period,
-        )
-        .mean()
-    )
-
-    average_loss = (
-        loss
-        .ewm(
-            alpha=1 / period,
-            adjust=False,
-            min_periods=period,
-        )
-        .mean()
-    )
-
-    rs = (
-        average_gain /
-        average_loss.replace(
-            0,
-            np.nan,
-        )
-    )
-
-    rsi = (
-        100 -
-        (
-            100 /
-            (
-                1 + rs
-            )
-        )
-    )
-
-    return rsi
-
-
-# =========================================================
-# ATR
-# =========================================================
-
-def calculate_atr(
-    high: pd.Series,
-    low: pd.Series,
-    close: pd.Series,
-    period: int = ATR_PERIOD,
-) -> pd.Series:
-
-    previous_close = (
-        close.shift(1)
-    )
-
-    range_1 = (
-        high -
-        low
-    )
-
-    range_2 = (
-        high -
-        previous_close
-    ).abs()
-
-    range_3 = (
-        low -
-        previous_close
-    ).abs()
-
-    true_range = pd.concat(
-        [
-            range_1,
-            range_2,
-            range_3,
-        ],
-        axis=1,
-    ).max(
-        axis=1
-    )
-
-    atr = (
-        true_range
-        .rolling(
-            period
-        )
-        .mean()
-    )
-
-    return atr
-
-
-# =========================================================
-# TECHNICAL SCORE
-# =========================================================
-
-def calculate_trend_score(
-    row: pd.Series,
-) -> float:
-
-    price = safe_float(
-        row.get("Close")
-    )
-
-    sma20 = safe_float(
-        row.get("SMA_20")
-    )
-
-    sma50 = safe_float(
-        row.get("SMA_50")
-    )
-
-    sma200 = safe_float(
-        row.get("SMA_200")
-    )
-
-    if (
-        price is None
-        or sma20 is None
-        or sma50 is None
-        or sma200 is None
-    ):
-
-        return 50.0
-
-    if (
-        price > sma20
-        and sma20 > sma50
-        and sma50 > sma200
-    ):
-
-        return 100.0
-
-    if (
-        price > sma20
-        and price > sma50
-        and price > sma200
-    ):
-
-        return 90.0
-
-    if (
-        price > sma200
-        and price > sma20
-    ):
-
-        return 80.0
-
-    if price > sma200:
-
-        return 70.0
-
-    if (
-        price < sma200
-        and price < sma50
-        and price < sma20
-    ):
-
-        return 10.0
-
-    if price < sma200:
-
-        return 30.0
-
-    return 50.0
-
-
-def calculate_momentum_score(
-    row: pd.Series,
-) -> float:
-
-    price = safe_float(
-        row.get("Close")
-    )
-
-    sma20 = safe_float(
-        row.get("SMA_20")
-    )
-
-    sma50 = safe_float(
-        row.get("SMA_50")
-    )
-
-    rsi = safe_float(
-        row.get("RSI_14")
-    )
-
-    if (
-        price is None
-        or sma20 is None
-        or sma50 is None
-    ):
-
-        return 50.0
-
-    if (
-        price > sma20 > sma50
-        and rsi is not None
-        and rsi >= 60
-    ):
-
-        return 100.0
-
-    if (
-        price > sma20
-        and rsi is not None
-        and rsi >= 50
-    ):
-
-        return 80.0
-
-    if (
-        price > sma50
-        and rsi is not None
-        and rsi >= 45
-    ):
-
-        return 65.0
-
-    if (
-        rsi is not None
-        and rsi < 35
-    ):
-
-        return 15.0
-
-    if (
-        rsi is not None
-        and rsi < 45
-    ):
-
-        return 30.0
-
-    return 50.0
-
-
-def calculate_rsi_score(
-    row: pd.Series,
-) -> float:
-
-    rsi = safe_float(
-        row.get("RSI_14")
-    )
-
-    if rsi is None:
-
-        return 50.0
-
-    if 50 <= rsi <= 65:
-
-        return 100.0
-
-    if 45 <= rsi < 50:
-
-        return 70.0
-
-    if 65 < rsi <= 70:
-
-        return 80.0
-
-    if 40 <= rsi < 45:
-
-        return 50.0
-
-    if 70 < rsi <= 80:
-
-        return 45.0
-
-    if rsi > 80:
-
-        return 20.0
-
-    return 25.0
-
-
-def calculate_volume_score(
-    row: pd.Series,
-) -> float:
-
-    ratio = safe_float(
-        row.get("Volume_Ratio")
-    )
-
-    if ratio is None:
-
-        return 50.0
-
-    if ratio >= 2.0:
-
-        return 100.0
-
-    if ratio >= 1.5:
-
-        return 90.0
-
-    if ratio >= 1.2:
-
-        return 80.0
-
-    if ratio >= 1.0:
-
-        return 65.0
-
-    if ratio >= 0.8:
-
-        return 45.0
-
-    return 25.0
-
-
-def calculate_position_score(
-    row: pd.Series,
-) -> float:
-
-    price = safe_float(
-        row.get("Close")
-    )
-
-    sma200 = safe_float(
-        row.get("SMA_200")
-    )
-
-    if (
-        price is None
-        or sma200 is None
-        or sma200 <= 0
-    ):
-
-        return 50.0
-
-    distance = (
-        (
-            price -
-            sma200
-        )
-        /
-        sma200
-    ) * 100.0
-
-    if distance >= 15:
-
-        return 100.0
-
-    if distance >= 5:
-
-        return 90.0
-
-    if distance >= 0:
-
-        return 80.0
-
-    if distance >= -3:
-
-        return 70.0
-
-    if distance >= -7:
-
-        return 50.0
-
-    if distance >= -12:
-
-        return 30.0
-
-    return 10.0
-
-
-def calculate_breakout_score(
-    row: pd.Series,
-) -> float:
-
-    breakout = str(
-        row.get(
-            "Breakout_Status",
-            "",
-        )
-    ).lower()
-
-    if any(
-        phrase in breakout
-        for phrase in [
-            "confirmed",
-            "strong breakout",
-        ]
-    ):
-
-        return 100.0
-
-    if any(
-        phrase in breakout
-        for phrase in [
-            "possible",
-            "potential",
-            "pre-breakout",
-        ]
-    ):
-
-        return 75.0
-
-    if "near" in breakout:
-
-        return 60.0
-
-    if any(
-        phrase in breakout
-        for phrase in [
-            "failed",
-            "negative",
-        ]
-    ):
-
-        return 20.0
-
-    price = safe_float(
-        row.get("Close")
-    )
-
-    resistance = safe_float(
-        row.get("Resistance")
-    )
-
-    volume_ratio = safe_float(
-        row.get("Volume_Ratio")
-    )
-
-    if (
-        price is not None
-        and resistance is not None
-        and resistance > 0
-    ):
-
-        distance = (
-            (
-                price -
-                resistance
-            )
-            /
-            resistance
-        ) * 100.0
-
-        if distance >= 0:
-
-            if (
-                volume_ratio is not None
-                and volume_ratio >= 1.2
-            ):
-
-                return 90.0
-
-            return 75.0
-
-        if distance >= -3:
-
-            return 60.0
-
-        if distance >= -5:
-
-            return 50.0
-
-    return 30.0
-
-
-def calculate_technical_score(
-    row: pd.Series,
-) -> float:
-
-    trend = calculate_trend_score(
-        row
-    )
-
-    momentum = calculate_momentum_score(
-        row
-    )
-
-    rsi = calculate_rsi_score(
-        row
-    )
-
-    volume = calculate_volume_score(
-        row
-    )
-
-    position = calculate_position_score(
-        row
-    )
-
-    breakout = calculate_breakout_score(
-        row
-    )
-
-    score = (
-        trend * 0.20
-        +
-        momentum * 0.15
-        +
-        rsi * 0.15
-        +
-        volume * 0.15
-        +
-        position * 0.15
-        +
-        breakout * 0.20
-    )
-
-    return round(
-        clamp(score),
-        2,
-    )
-
-
-# =========================================================
-# TREND LABEL
-# =========================================================
-
-def determine_trend(
-    row: pd.Series,
-) -> str:
-
-    score = calculate_trend_score(
-        row
-    )
-
-    if score >= 90:
-        return "Strong Uptrend"
-
-    if score >= 75:
-        return "Uptrend"
-
-    if score >= 60:
-        return "Positive"
-
-    if score <= 20:
-        return "Downtrend"
-
-    if score <= 40:
-        return "Weak"
-
-    return "Sideways"
-
-
-# =========================================================
-# MOMENTUM LABEL
-# =========================================================
-
-def determine_momentum(
-    row: pd.Series,
-) -> str:
-
-    score = calculate_momentum_score(
-        row
-    )
-
-    if score >= 90:
-        return "Strong Positive"
-
-    if score >= 70:
-        return "Positive"
-
-    if score <= 25:
-        return "Strong Negative"
-
-    if score <= 40:
-        return "Negative"
-
-    return "Neutral"
-
-
-# =========================================================
-# BREAKOUT STATUS
-# =========================================================
-
-def determine_breakout_status(
-    row: pd.Series,
-) -> str:
-
-    price = safe_float(
-        row.get("Close")
-    )
-
-    resistance = safe_float(
-        row.get("Resistance")
-    )
-
-    volume_ratio = safe_float(
-        row.get("Volume_Ratio")
-    )
-
-    if (
-        price is None
-        or resistance is None
-        or resistance <= 0
-    ):
-
-        return "No Breakout"
-
-    distance = (
-        (
-            price -
-            resistance
-        )
-        /
-        resistance
-    ) * 100.0
-
-    if distance >= 0:
-
-        if (
-            volume_ratio is None
-            or volume_ratio >= 1.2
-        ):
-
-            return "Confirmed Breakout"
-
-        return "Breakout Confirmation Required"
-
-    if distance >= -3:
-
-        return "Near Breakout"
-
-    if distance >= -5:
-
-        return "Pre-Breakout"
-
-    return "No Breakout"
-
-
-# =========================================================
-# PREPARE DATA
-# =========================================================
-
-def prepare_data(
-    data: pd.DataFrame,
-) -> pd.DataFrame:
-
-    df = normalize_ohlcv_columns(
-        data
-    )
-
-    if df.empty:
-
-        return pd.DataFrame()
-
-    required = [
-        "High",
-        "Low",
-        "Close",
-    ]
-
-    missing = [
-        column
-        for column
-        in required
-        if column not in df.columns
-    ]
-
-    if missing:
-
-        print(
-            "Technical engine skipped "
-            f"data because columns are missing: "
-            f"{missing}"
-        )
-
-        print(
-            "Available columns: "
-            f"{list(df.columns)}"
-        )
-
-        return pd.DataFrame()
-
-    df = df.dropna(
-        subset=[
-            "Close",
-        ]
-    )
-
-    if df.empty:
-
-        return pd.DataFrame()
-
-    # -----------------------------------------------------
-    # Basic fields
-    # -----------------------------------------------------
-
-    df["Previous_Close"] = (
-        df["Close"]
-        .shift(1)
-    )
-
-    df["Daily_Return_Pct"] = (
-        (
-            df["Close"] -
-            df["Previous_Close"]
-        )
-        /
-        df["Previous_Close"]
-        .replace(
-            0,
-            np.nan,
-        )
-    ) * 100.0
-
-    # -----------------------------------------------------
-    # Moving averages
-    # -----------------------------------------------------
-
-    df["SMA_20"] = (
-        df["Close"]
-        .rolling(
-            SMA_SHORT
-        )
-        .mean()
-    )
-
-    df["SMA_50"] = (
-        df["Close"]
-        .rolling(
-            SMA_MEDIUM
-        )
-        .mean()
-    )
-
-    df["SMA_100"] = (
-        df["Close"]
-        .rolling(
-            SMA_LONG
-        )
-        .mean()
-    )
-
-    df["SMA_200"] = (
-        df["Close"]
-        .rolling(
-            SMA_200
-        )
-        .mean()
-    )
-
-    # -----------------------------------------------------
-    # EMA
-    # -----------------------------------------------------
-
-    df["EMA_9"] = (
-        df["Close"]
-        .ewm(
-            span=EMA_FAST,
-            adjust=False,
-        )
-        .mean()
-    )
-
-    df["EMA_20"] = (
-        df["Close"]
-        .ewm(
-            span=EMA_SHORT,
-            adjust=False,
-        )
-        .mean()
-    )
-
-    df["EMA_50"] = (
-        df["Close"]
-        .ewm(
-            span=EMA_MEDIUM,
-            adjust=False,
-        )
-        .mean()
-    )
-
-    # -----------------------------------------------------
-    # RSI
-    # -----------------------------------------------------
-
-    df["RSI_14"] = calculate_rsi(
-        df["Close"],
-        RSI_PERIOD,
-    )
-
-    # -----------------------------------------------------
-    # ATR
-    # -----------------------------------------------------
-
-    df["ATR_14"] = calculate_atr(
-        df["High"],
-        df["Low"],
-        df["Close"],
-        ATR_PERIOD,
-    )
-
-    df["ATR_Pct"] = (
-        df["ATR_14"] /
-        df["Close"].replace(
-            0,
-            np.nan,
-        )
-    ) * 100.0
-
-    # -----------------------------------------------------
-    # Volume
-    # -----------------------------------------------------
-
-    if "Volume" in df.columns:
-
-        df["Average_Volume_20"] = (
-            df["Volume"]
-            .rolling(
-                VOLUME_PERIOD
-            )
-            .mean()
-        )
-
-        df["Volume_Ratio"] = (
-            df["Volume"] /
-            df[
-                "Average_Volume_20"
-            ].replace(
-                0,
-                np.nan,
-            )
-        )
-
-    else:
-
-        df["Volume"] = np.nan
-
-        df["Average_Volume_20"] = np.nan
-
-        df["Volume_Ratio"] = np.nan
-
-    # -----------------------------------------------------
-    # 52 week high / low
-    # -----------------------------------------------------
-
-    df["52W_High"] = (
-        df["High"]
-        .rolling(
-            HIGH_LOW_PERIOD,
-            min_periods=20,
-        )
-        .max()
-    )
-
-    df["52W_Low"] = (
-        df["Low"]
-        .rolling(
-            HIGH_LOW_PERIOD,
-            min_periods=20,
-        )
-        .min()
-    )
-
-    df["Distance_52W_High_Pct"] = (
-        (
-            df["Close"] -
-            df["52W_High"]
-        )
-        /
-        df["52W_High"]
-        .replace(
-            0,
-            np.nan,
-        )
-    ) * 100.0
-
-    df["Distance_52W_Low_Pct"] = (
-        (
-            df["Close"] -
-            df["52W_Low"]
-        )
-        /
-        df["52W_Low"]
-        .replace(
-            0,
-            np.nan,
-        )
-    ) * 100.0
-
-    # -----------------------------------------------------
-    # 200 DMA distance
-    # -----------------------------------------------------
-
-    df["Distance_200DMA_Pct"] = (
-        (
-            df["Close"] -
-            df["SMA_200"]
-        )
-        /
-        df["SMA_200"]
-        .replace(
-            0,
-            np.nan,
-        )
-    ) * 100.0
-
-    df["Above_200DMA"] = (
-        df["Close"] >
-        df["SMA_200"]
-    )
-
-    # -----------------------------------------------------
-    # Support / resistance
-    #
-    # Shift by one day so today's price does not become
-    # today's own support/resistance.
-    # -----------------------------------------------------
-
-    df["Support"] = (
-        df["Low"]
-        .shift(1)
-        .rolling(
-            SUPPORT_PERIOD
-        )
-        .min()
-    )
-
-    df["Resistance"] = (
-        df["High"]
-        .shift(1)
-        .rolling(
-            RESISTANCE_PERIOD
-        )
-        .max()
-    )
-
-    # -----------------------------------------------------
-    # Technical labels
-    # -----------------------------------------------------
-
-    df["Trend"] = df.apply(
-        determine_trend,
-        axis=1,
-    )
-
-    df["Momentum"] = df.apply(
-        determine_momentum,
-        axis=1,
-    )
-
-    df["Breakout_Status"] = df.apply(
-        determine_breakout_status,
-        axis=1,
-    )
-
-    # -----------------------------------------------------
-    # Technical score
-    # -----------------------------------------------------
-
-    df["Technical_Score"] = df.apply(
-        calculate_technical_score,
-        axis=1,
-    )
-
-    # -----------------------------------------------------
-    # Technical rank
-    # -----------------------------------------------------
-
-    df["Technical_Rank"] = (
-        df["Technical_Score"]
-        .rank(
-            ascending=False,
-            method="min",
-        )
-    )
-
-    return df
-
-
-# =========================================================
-# LATEST ROW
-# =========================================================
-
-def get_latest_analysis(
-    data: pd.DataFrame,
-) -> dict:
-
-    df = prepare_data(
-        data
-    )
-
-    if df.empty:
-
-        return {}
-
-    latest = df.iloc[-1]
+        setup = "Neutral Watch"
 
     return {
-        "price":
-            safe_float(
-                latest.get(
-                    "Close"
-                )
-            ),
-
-        "previous_close":
-            safe_float(
-                latest.get(
-                    "Previous_Close"
-                )
-            ),
-
-        "daily_return_pct":
-            safe_float(
-                latest.get(
-                    "Daily_Return_Pct"
-                )
-            ),
-
-        "sma20":
-            safe_float(
-                latest.get(
-                    "SMA_20"
-                )
-            ),
-
-        "sma50":
-            safe_float(
-                latest.get(
-                    "SMA_50"
-                )
-            ),
-
-        "sma100":
-            safe_float(
-                latest.get(
-                    "SMA_100"
-                )
-            ),
-
-        "sma200":
-            safe_float(
-                latest.get(
-                    "SMA_200"
-                )
-            ),
-
-        "ema9":
-            safe_float(
-                latest.get(
-                    "EMA_9"
-                )
-            ),
-
-        "ema20":
-            safe_float(
-                latest.get(
-                    "EMA_20"
-                )
-            ),
-
-        "ema50":
-            safe_float(
-                latest.get(
-                    "EMA_50"
-                )
-            ),
-
-        "rsi14":
-            safe_float(
-                latest.get(
-                    "RSI_14"
-                )
-            ),
-
-        "atr14":
-            safe_float(
-                latest.get(
-                    "ATR_14"
-                )
-            ),
-
-        "atr_percent":
-            safe_float(
-                latest.get(
-                    "ATR_Pct"
-                )
-            ),
-
-        "volume":
-            safe_float(
-                latest.get(
-                    "Volume"
-                )
-            ),
-
-        "average_volume_20":
-            safe_float(
-                latest.get(
-                    "Average_Volume_20"
-                )
-            ),
-
-        "volume_ratio":
-            safe_float(
-                latest.get(
-                    "Volume_Ratio"
-                )
-            ),
-
-        "52w_high":
-            safe_float(
-                latest.get(
-                    "52W_High"
-                )
-            ),
-
-        "52w_low":
-            safe_float(
-                latest.get(
-                    "52W_Low"
-                )
-            ),
-
-        "distance_from_52w_high_pct":
-            safe_float(
-                latest.get(
-                    "Distance_52W_High_Pct"
-                )
-            ),
-
-        "distance_from_52w_low_pct":
-            safe_float(
-                latest.get(
-                    "Distance_52W_Low_Pct"
-                )
-            ),
-
-        "distance_from_200dma_pct":
-            safe_float(
-                latest.get(
-                    "Distance_200DMA_Pct"
-                )
-            ),
-
-        "above_200dma":
-            bool(
-                latest.get(
-                    "Above_200DMA",
-                    False,
-                )
-            ),
-
-        "support":
-            safe_float(
-                latest.get(
-                    "Support"
-                )
-            ),
-
-        "resistance":
-            safe_float(
-                latest.get(
-                    "Resistance"
-                )
-            ),
-
-        "trend":
-            latest.get(
-                "Trend"
-            ),
-
-        "momentum":
-            latest.get(
-                "Momentum"
-            ),
-
-        "breakout_status":
-            latest.get(
-                "Breakout_Status"
-            ),
-
-        "technical_score":
-            safe_float(
-                latest.get(
-                    "Technical_Score"
-                )
-            ),
+        "Symbol": ticker.replace(".NS",""),
+        "Yahoo_Symbol": ticker,
+        "Date": cur.date.strftime("%Y-%m-%d"),
+        "Open": float(cur.open), "High": float(cur.high), "Low": float(cur.low),
+        "Close": float(cur.close), "Volume": float(cur.volume),
+        "SMA20": float(cur.sma20), "SMA50": float(cur.sma50),
+        "SMA100": float(cur.sma100), "SMA200": float(cur.sma200),
+        "EMA9": float(cur.ema9), "EMA20": float(cur.ema20), "EMA50": float(cur.ema50),
+        "RSI14": float(cur.rsi14), "ATR14": float(cur.atr14),
+        "ATR_Pct": float(cur.atr14/cur.close*100),
+        "Volume_Ratio": float(cur.volume_ratio),
+        "52W_High": float(cur.high52w), "52W_Low": float(cur.low52w),
+        "Distance_200DMA_Pct": float(cur.distance200),
+        "Distance_52W_High_Pct": float(cur.distance52high),
+        "Support": float(cur.support20), "Resistance": float(cur.resistance20),
+        "Pivot": float(cur.pivot),
+        "Return_5D_Pct": float(cur.return5), "Return_20D_Pct": float(cur.return20),
+        "Return_60D_Pct": float(cur.return60),
+        "Above_200DMA": above200,
+        "Near_200DMA": near200,
+        "Recent_200DMA_Cross_Down": bool(recent_cross),
+        "Breakout": breakout, "Near_Breakout": near_breakout,
+        "Technical_Score": round(float(technical_score),2),
+        "Trend_Score": round(float(trend_score),2),
+        "Momentum_Score": round(float(momentum_score),2),
+        "RSI_Score": round(float(rsi_score),2),
+        "Volume_Score": round(float(volume_score),2),
+        "Position_Score": round(float(position_score),2),
+        "Breakout_Score": round(float(breakout_score),2),
+        "Setup": setup,
     }
 
+def calculate_technical_indicators(universe, period="2y", batch_size=100):
+    """Download Yahoo EOD data for the NSE universe and return latest technical rows."""
+    u = universe.copy()
+    symbol_col = next((c for c in u.columns if str(c).lower()=="symbol"), None)
+    yahoo_col = next((c for c in u.columns if str(c).lower() in {"yahoo_symbol","yahoo symbol"}), None)
+    if not symbol_col:
+        raise ValueError("Technical engine requires Symbol/symbol in universe.")
+    if not yahoo_col:
+        u["yahoo_symbol"] = u[symbol_col].astype(str).str.upper()+".NS"
+        yahoo_col = "yahoo_symbol"
 
-# =========================================================
-# MAIN FUNCTION USED BY SCANNER.PY
-# =========================================================
-
-def calculate_technical_indicators(
-    data: pd.DataFrame,
-    symbol: str | None = None,
-) -> pd.DataFrame:
-    """
-    Main technical-engine entry point.
-
-    Compatible with scanner.py calls such as:
-
-        calculate_technical_indicators(data)
-
-    or:
-
-        calculate_technical_indicators(
-            data,
-            symbol,
-        )
-    """
-
-    if data is None:
-
-        return pd.DataFrame()
-
-    if not isinstance(
-        data,
-        pd.DataFrame,
-    ):
-
-        return pd.DataFrame()
-
-    if data.empty:
-
-        return pd.DataFrame()
-
-    try:
-
-        df = prepare_data(
-            data
-        )
-
-        if df.empty:
-
-            return pd.DataFrame()
-
-        # -------------------------------------------------
-        # Add symbol if supplied.
-        # -------------------------------------------------
-
-        if symbol is not None:
-
-            df["Symbol"] = str(
-                symbol
+    tickers = u[yahoo_col].dropna().astype(str).unique().tolist()
+    results = []
+    failures = []
+    print(f"Downloading historical OHLCV for {len(tickers):,} NSE stocks...")
+    for start in range(0, len(tickers), batch_size):
+        batch = tickers[start:start+batch_size]
+        try:
+            raw = yf.download(
+                batch, period=period, interval="1d",
+                auto_adjust=False, progress=False, group_by="ticker",
+                threads=True
             )
+        except Exception as e:
+            failures.extend([(t, str(e)) for t in batch])
+            continue
 
-        # -------------------------------------------------
-        # Compatibility aliases.
-        #
-        # Ranking engine expects several possible names.
-        # Keeping these aliases makes the pipeline robust.
-        # -------------------------------------------------
+        for ticker in batch:
+            try:
+                row = _analyse(ticker, raw if len(batch)>1 else raw)
+                if row:
+                    results.append(row)
+                else:
+                    failures.append((ticker, "insufficient or invalid OHLCV"))
+            except Exception as e:
+                failures.append((ticker, str(e)))
 
-        df["Close"] = df[
-            "Close"
-        ]
+        done = min(start+len(batch), len(tickers))
+        print(f"Technical progress: {done:,}/{len(tickers):,}")
+        time.sleep(0.2)
 
-        df["Price"] = df[
-            "Close"
-        ]
-
-        df["Previous_Close"] = df[
-            "Previous_Close"
-        ]
-
-        df["Daily_Return_Pct"] = df[
-            "Daily_Return_Pct"
-        ]
-
-        df["SMA20"] = df[
-            "SMA_20"
-        ]
-
-        df["SMA50"] = df[
-            "SMA_50"
-        ]
-
-        df["SMA100"] = df[
-            "SMA_100"
-        ]
-
-        df["SMA200"] = df[
-            "SMA_200"
-        ]
-
-        df["EMA9"] = df[
-            "EMA_9"
-        ]
-
-        df["EMA20"] = df[
-            "EMA_20"
-        ]
-
-        df["EMA50"] = df[
-            "EMA_50"
-        ]
-
-        df["RSI14"] = df[
-            "RSI_14"
-        ]
-
-        df["ATR14"] = df[
-            "ATR_14"
-        ]
-
-        df["ATR_Percent"] = df[
-            "ATR_Pct"
-        ]
-
-        df["AverageVolume20"] = df[
-            "Average_Volume_20"
-        ]
-
-        df["VolumeRatio"] = df[
-            "Volume_Ratio"
-        ]
-
-        df["52w_high"] = df[
-            "52W_High"
-        ]
-
-        df["52w_low"] = df[
-            "52W_Low"
-        ]
-
-        df["distance_from_52w_high_pct"] = (
-            df[
-                "Distance_52W_High_Pct"
-            ]
-        )
-
-        df["distance_from_52w_low_pct"] = (
-            df[
-                "Distance_52W_Low_Pct"
-            ]
-        )
-
-        df["distance_from_200dma_pct"] = (
-            df[
-                "Distance_200DMA_Pct"
-            ]
-        )
-
-        df["above_200dma"] = (
-            df[
-                "Above_200DMA"
-            ]
-        )
-
-        df["support"] = df[
-            "Support"
-        ]
-
-        df["resistance"] = df[
-            "Resistance"
-        ]
-
-        df["trend"] = df[
-            "Trend"
-        ]
-
-        df["momentum"] = df[
-            "Momentum"
-        ]
-
-        df["breakout_status"] = df[
-            "Breakout_Status"
-        ]
-
-        df["technical_score"] = df[
-            "Technical_Score"
-        ]
-
-        df["technical_rank"] = df[
-            "Technical_Rank"
-        ]
-
-        # -------------------------------------------------
-        # Minimum data check.
-        #
-        # Do not reject the whole DataFrame here because
-        # scanner.py may handle minimum-history filtering.
-        # -------------------------------------------------
-
-        return df
-
-    except Exception as error:
-
-        print(
-            "Technical engine error"
-            + (
-                f" for {symbol}"
-                if symbol
-                else ""
-            )
-            + f": {error}"
-        )
-
-        return pd.DataFrame()
-
-
-# =========================================================
-# SCRIPT TEST
-# =========================================================
-
-if __name__ == "__main__":
-
-    print(
-        "=" * 60
+    out = pd.DataFrame(results)
+    if not out.empty:
+        names = u[[symbol_col] + ([c for c in ["name","series","isin"] if c in u.columns])].copy()
+        names = names.rename(columns={symbol_col:"Symbol"})
+        out = out.merge(names.drop_duplicates("Symbol"), on="Symbol", how="left")
+    pd.DataFrame(failures, columns=["Yahoo_Symbol","Reason"]).to_csv(
+        OUTPUT_DIR/"technical_failures.csv", index=False
     )
-
-    print(
-        "TECHNICAL ENGINE TEST"
-    )
-
-    print(
-        "=" * 60
-    )
-
-    print(
-        "Module loaded successfully."
-    )
-
-    print(
-        "Yahoo Finance MultiIndex handling: ENABLED"
-    )
-
-    print(
-        "OHLCV normalization: ENABLED"
-    )
-
-    print(
-        "SMA / EMA / RSI / ATR: ENABLED"
-    )
-
-    print(
-        "52W High / Low: ENABLED"
-    )
-
-    print(
-        "200 DMA: ENABLED"
-    )
-
-    print(
-        "Support / Resistance: ENABLED"
-    )
-
-    print(
-        "Technical Score: ENABLED"
-    )
+    out.to_csv(OUTPUT_DIR/"technical_scan.csv", index=False)
+    print(f"Technical records: {len(out):,}")
+    return out
