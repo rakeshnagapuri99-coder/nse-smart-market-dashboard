@@ -1,146 +1,57 @@
 // ============================================================
-// NSE SMART MARKET DASHBOARD V2
+// NSE SMART MARKET DASHBOARD V2.1
 // DASHBOARD ENGINE
 // Created by Rakesh Nagapuri
 // ============================================================
 
 let dashboardData = null;
 
-
-// ============================================================
-// WATCHLIST CONFIGURATION
-// ============================================================
-
 const WATCHLIST_NAMES = {
-
-    next_day:
-        "Next Day Watchlist",
-
-    intraday:
-        "Intraday Watchlist",
-
-    swing:
-        "Equity Swing",
-
-    long_term:
-        "Long-Term Investment",
-
-    "52w_high":
-        "52W High",
-
-    dma_recovery:
-        "200 DMA Recovery",
-
-    options:
-        "Options Watch",
-
-    momentum:
-        "Momentum Watch",
-
-    breakout:
-        "Breakout Watch"
+    next_day: "Next Day Watchlist",
+    intraday: "Intraday Watchlist",
+    swing: "Equity Swing",
+    long_term: "Long-Term Investment",
+    "52w_high": "52W High",
+    dma_recovery: "200 DMA Recovery",
+    options: "Options Watch",
+    momentum: "Momentum Watch",
+    breakout: "Breakout Watch"
 };
-
 
 const WATCHLIST_FILES = {
-
-    next_day:
-        "next_day.xlsx",
-
-    intraday:
-        "intraday.xlsx",
-
-    swing:
-        "swing.xlsx",
-
-    long_term:
-        "long_term.xlsx",
-
-    "52w_high":
-        "52w_high.xlsx",
-
-    dma_recovery:
-        "dma_recovery.xlsx",
-
-    options:
-        "options.xlsx",
-
-    momentum:
-        "momentum.xlsx",
-
-    breakout:
-        "breakout.xlsx"
+    next_day: "next_day.xlsx",
+    intraday: "intraday.xlsx",
+    swing: "swing.xlsx",
+    long_term: "long_term.xlsx",
+    "52w_high": "52w_high.xlsx",
+    dma_recovery: "dma_recovery.xlsx",
+    options: "options.xlsx",
+    momentum: "momentum.xlsx",
+    breakout: "breakout.xlsx"
 };
 
-
-// ============================================================
-// INITIAL LOAD
-// ============================================================
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-        loadDashboard();
-    }
-);
-
-
-// ============================================================
-// LOAD DASHBOARD
-// ============================================================
+document.addEventListener("DOMContentLoaded", loadDashboard);
 
 async function loadDashboard() {
-
     try {
-
         const response = await fetch(
-            "output/dashboard_data.json?v=" +
-            Date.now()
+            "output/dashboard_data.json?v=" + Date.now(),
+            { cache: "no-store" }
         );
 
         if (!response.ok) {
-
-            throw new Error(
-                "Unable to load dashboard data."
-            );
+            throw new Error("Unable to load dashboard data.");
         }
 
-        dashboardData =
-            await response.json();
-
-
-        // ----------------------------------------------------
-        // IMPORTANT:
-        // Convert backend JSON structure into the structure
-        // expected by the frontend.
-        // ----------------------------------------------------
-
+        dashboardData = await response.json();
         normalizeDashboardData();
-
-
         renderDashboard();
 
-
-        // ----------------------------------------------------
-        // Portfolio Builder
-        // ----------------------------------------------------
-
-        if (
-            typeof initializePortfolioBuilder ===
-            "function"
-        ) {
-
+        if (typeof initializePortfolioBuilder === "function") {
             initializePortfolioBuilder();
         }
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Dashboard loading error:",
-            error
-        );
+    } catch (error) {
+        console.error("Dashboard loading error:", error);
 
         showDashboardError(
             "Dashboard data could not be loaded. Please run the market scanner first."
@@ -148,452 +59,158 @@ async function loadDashboard() {
     }
 }
 
-
 // ============================================================
-// BACKEND → FRONTEND NORMALIZATION
+// DATA NORMALIZATION
 // ============================================================
 
 function normalizeDashboardData() {
+    if (!dashboardData) return;
 
-    if (!dashboardData) {
-        return;
-    }
-
-
-    // ========================================================
-    // MARKET REGIME
-    // ========================================================
-
-    const sourceMarket =
-        dashboardData.market_regime ||
-        dashboardData.market ||
-        {};
-
-
-    if (
-        !dashboardData.market ||
-        Object.keys(
-            dashboardData.market
-        ).length === 0
-    ) {
+    if (!dashboardData.market) {
+        const source = dashboardData.market_regime || {};
 
         dashboardData.market = {
-
             regime:
-                sourceMarket.market_regime ??
-                sourceMarket.regime ??
+                source.market_regime ??
+                source.regime ??
                 "Unavailable",
 
-            market_score:
-                sourceMarket.market_score,
+            market_score: source.market_score,
 
             nifty: {
-
                 price:
-                    sourceMarket.nifty_price ??
-                    sourceMarket.nifty?.price,
+                    source.nifty_price ??
+                    source.nifty_close,
+
+                previous_close:
+                    source.nifty_previous_close,
 
                 daily_return_pct:
-                    sourceMarket.nifty_daily_return_pct ??
-                    sourceMarket.nifty_change_pct ??
-                    sourceMarket.nifty?.daily_return_pct,
+                    source.nifty_daily_return_pct ??
+                    source.nifty_change_pct,
 
-                trend:
-                    sourceMarket.nifty_trend ??
-                    sourceMarket.nifty?.trend,
+                trend: source.nifty_trend,
 
-                momentum:
-                    sourceMarket.nifty_momentum ??
-                    sourceMarket.nifty?.momentum,
+                momentum: source.nifty_momentum,
 
-                rsi14:
-                    sourceMarket.nifty_rsi ??
-                    sourceMarket.nifty_rsi14 ??
-                    sourceMarket.nifty?.rsi14
+                rsi14: source.nifty_rsi
             },
-
 
             bank_nifty: {
-
                 price:
-                    sourceMarket.bank_nifty_price ??
-                    sourceMarket.bank_nifty?.price,
+                    source.bank_nifty_price ??
+                    source.bank_nifty_close,
+
+                previous_close:
+                    source.bank_nifty_previous_close,
 
                 daily_return_pct:
-                    sourceMarket.bank_nifty_daily_return_pct ??
-                    sourceMarket.bank_nifty_change_pct ??
-                    sourceMarket.bank_nifty?.daily_return_pct,
+                    source.bank_nifty_daily_return_pct ??
+                    source.bank_nifty_change_pct,
 
-                trend:
-                    sourceMarket.bank_nifty_trend ??
-                    sourceMarket.bank_nifty?.trend,
+                trend: source.bank_nifty_trend,
 
-                momentum:
-                    sourceMarket.bank_nifty_momentum ??
-                    sourceMarket.bank_nifty?.momentum,
+                momentum: source.bank_nifty_momentum,
 
-                rsi14:
-                    sourceMarket.bank_nifty_rsi ??
-                    sourceMarket.bank_nifty_rsi14 ??
-                    sourceMarket.bank_nifty?.rsi14
+                rsi14: source.bank_nifty_rsi
             },
-
 
             vix: {
-
-                price:
-                    sourceMarket.vix ??
-                    sourceMarket.vix_price ??
-                    sourceMarket.vix?.price,
+                price: source.vix,
 
                 daily_return_pct:
-                    sourceMarket.vix_daily_return_pct ??
-                    sourceMarket.vix_change_pct ??
-                    sourceMarket.vix?.daily_return_pct,
+                    source.vix_daily_return_pct,
 
                 environment:
-                    sourceMarket.vix_interpretation ??
-                    sourceMarket.vix?.environment
+                    source.vix_interpretation
             },
 
-
             equity_environment:
-                sourceMarket.equity_environment,
+                source.equity_environment,
 
             swing_environment:
-                sourceMarket.swing_environment,
+                source.swing_environment,
 
             breakout_environment:
-                sourceMarket.breakout_environment,
+                source.breakout_environment,
 
             intraday_environment:
-                sourceMarket.intraday_environment,
+                source.intraday_environment,
 
             options_environment:
-                sourceMarket.options_environment
+                source.options_environment,
+
+            market_analysis:
+                source.market_analysis ||
+                source.next_day_analysis ||
+                {}
         };
     }
 
-
-    // ========================================================
-    // MARKET BREADTH
-    // ========================================================
-
-    const sourceBreadth =
-        dashboardData.market_breadth ||
-        dashboardData.breadth ||
-        {};
-
-
-    if (
-        !dashboardData.breadth ||
-        Object.keys(
-            dashboardData.breadth
-        ).length === 0
-    ) {
+    if (!dashboardData.breadth) {
+        const source =
+            dashboardData.market_breadth || {};
 
         dashboardData.breadth = {
-
             stocks_analyzed:
-                sourceBreadth.stocks_analyzed,
+                source.stocks_analyzed,
 
             above_20_dma:
-                sourceBreadth.above_20dma ??
-                sourceBreadth.above_20_dma,
+                source.above_20dma ??
+                source.above_20_dma,
 
             above_50_dma:
-                sourceBreadth.above_50dma ??
-                sourceBreadth.above_50_dma,
+                source.above_50dma ??
+                source.above_50_dma,
 
             above_200_dma:
-                sourceBreadth.above_200dma ??
-                sourceBreadth.above_200_dma,
+                source.above_200dma ??
+                source.above_200_dma,
 
             high_52w_count:
-                sourceBreadth["52w_highs"] ??
-                sourceBreadth.high_52w_count,
+                source["52w_highs"] ??
+                source.high_52w_count,
 
             low_52w_count:
-                sourceBreadth["52w_lows"] ??
-                sourceBreadth.low_52w_count,
+                source["52w_lows"] ??
+                source.low_52w_count,
 
             high_low_ratio:
-                sourceBreadth.high_low_ratio,
+                source.high_low_ratio,
 
             breadth_score:
-                sourceBreadth.breadth_score,
+                source.breadth_score,
 
             breadth_regime:
-                sourceBreadth.breadth_regime
+                source.breadth_regime
         };
     }
 
-
-    // ========================================================
-    // SECTOR DATA
-    // ========================================================
-
-    if (
-        !dashboardData.sectors ||
-        !Array.isArray(
-            dashboardData.sectors
-        )
-    ) {
-
+    if (!dashboardData.sectors) {
         dashboardData.sectors =
-            dashboardData.sector_analysis ||
-            [];
+            dashboardData.sector_analysis || [];
     }
 
-
-    // ========================================================
-    // STOCK DATA
-    // ========================================================
-
-    if (
-        !dashboardData.stocks ||
-        !Array.isArray(
-            dashboardData.stocks
-        )
-    ) {
-
-        dashboardData.stocks = [];
-    }
-
-
-    // ========================================================
-    // WATCHLIST DATA
-    // ========================================================
-
-    if (
-        !dashboardData.watchlists ||
-        typeof dashboardData.watchlists !==
-        "object"
-    ) {
-
+    if (!dashboardData.watchlists) {
         dashboardData.watchlists = {};
     }
 
-
-    // ========================================================
-    // NORMALIZE WATCHLIST STOCK FIELDS
-    // ========================================================
-
-    Object.keys(
-        dashboardData.watchlists
-    ).forEach(
-        name => {
-
-            if (
-                !Array.isArray(
-                    dashboardData.watchlists[name]
-                )
-            ) {
-                dashboardData.watchlists[name] = [];
-            }
-
-            dashboardData.watchlists[name] =
-                dashboardData.watchlists[name].map(
-                    normalizeStock
-                );
-        }
-    );
-
-
-    // ========================================================
-    // NORMALIZE MASTER STOCK DATA
-    // ========================================================
-
-    dashboardData.stocks =
-        dashboardData.stocks.map(
-            normalizeStock
-        );
-}
-
-
-// ============================================================
-// STOCK FIELD NORMALIZATION
-// ============================================================
-
-function normalizeStock(stock) {
-
-    if (!stock || typeof stock !== "object") {
-        return {};
+    if (!dashboardData.stocks) {
+        dashboardData.stocks = [];
     }
-
-    return {
-
-        ...stock,
-
-        symbol:
-            stock.symbol ??
-            stock.nse_symbol ??
-            stock.SYMBOL,
-
-        company_name:
-            stock.company_name ??
-            stock.company ??
-            stock["NAME OF COMPANY"],
-
-        price:
-            stock.price ??
-            stock.close ??
-            stock.Close,
-
-        previous_close:
-            stock.previous_close ??
-            stock.Previous_Close,
-
-        daily_return_pct:
-            stock.daily_return_pct ??
-            stock.change_pct ??
-            stock.Daily_Return_Pct,
-
-        sma20:
-            stock.sma20 ??
-            stock.SMA20,
-
-        sma50:
-            stock.sma50 ??
-            stock.SMA50,
-
-        sma100:
-            stock.sma100 ??
-            stock.SMA100,
-
-        sma200:
-            stock.sma200 ??
-            stock.SMA200,
-
-        ema9:
-            stock.ema9 ??
-            stock.EMA9,
-
-        ema20:
-            stock.ema20 ??
-            stock.EMA20,
-
-        ema50:
-            stock.ema50 ??
-            stock.EMA50,
-
-        rsi14:
-            stock.rsi14 ??
-            stock.RSI14,
-
-        atr14:
-            stock.atr14 ??
-            stock.ATR14,
-
-        atr_percent:
-            stock.atr_percent ??
-            stock.ATR_Percent,
-
-        volume:
-            stock.volume ??
-            stock.Volume,
-
-        average_volume_20:
-            stock.average_volume_20 ??
-            stock.Average_Volume_20,
-
-        volume_ratio:
-            stock.volume_ratio ??
-            stock.Volume_Ratio,
-
-        "52w_high":
-            stock["52w_high"] ??
-            stock["52W_High"],
-
-        "52w_low":
-            stock["52w_low"] ??
-            stock["52W_Low"],
-
-        distance_from_52w_high_pct:
-            stock.distance_from_52w_high_pct ??
-            stock.Distance_From_52W_High_Pct,
-
-        distance_from_52w_low_pct:
-            stock.distance_from_52w_low_pct ??
-            stock.Distance_From_52W_Low_Pct,
-
-        distance_from_200dma_pct:
-            stock.distance_from_200dma_pct ??
-            stock.Distance_From_200DMA_Pct,
-
-        above_200dma:
-            stock.above_200dma ??
-            stock.Above_200DMA,
-
-        support:
-            stock.support ??
-            stock.Support,
-
-        resistance:
-            stock.resistance ??
-            stock.Resistance,
-
-        trend:
-            stock.trend ??
-            stock.Trend,
-
-        momentum:
-            stock.momentum ??
-            stock.Momentum,
-
-        breakout_status:
-            stock.breakout_status ??
-            stock.Breakout_Status,
-
-        setup:
-            stock.setup ??
-            stock.Setup,
-
-        overall_score:
-            stock.overall_score ??
-            stock.Overall_Score,
-
-        technical_score:
-            stock.technical_score ??
-            stock.Technical_Score,
-
-        fundamental_score:
-            stock.fundamental_score ??
-            stock.Fundamental_Score,
-
-        sector_score:
-            stock.sector_score ??
-            stock.Sector_Score,
-
-        rating:
-            stock.rating ??
-            stock.Rating,
-
-        risk_reward:
-            stock.risk_reward ??
-            stock.Risk_Reward
-    };
 }
-
 
 // ============================================================
 // MAIN RENDER
 // ============================================================
 
 function renderDashboard() {
-
-    if (!dashboardData) {
-        return;
-    }
+    if (!dashboardData) return;
 
     renderMarketRegime();
-
     renderBreadth();
-
     renderSectors();
-
     renderWatchlists();
-
     updateLastUpdated();
 
     document.body.classList.add(
@@ -601,21 +218,15 @@ function renderDashboard() {
     );
 }
 
-
 // ============================================================
 // MARKET REGIME
 // ============================================================
 
 function renderMarketRegime() {
-
     const container =
-        document.getElementById(
-            "marketRegime"
-        );
+        document.getElementById("marketRegime");
 
-    if (!container) {
-        return;
-    }
+    if (!container) return;
 
     const market =
         dashboardData.market || {};
@@ -636,9 +247,7 @@ function renderMarketRegime() {
     const vix =
         market.vix || {};
 
-
     container.innerHTML = `
-
         <div class="market-regime-main">
 
             <div class="regime-badge ${getRegimeClass(regime)}">
@@ -653,7 +262,6 @@ function renderMarketRegime() {
             </div>
 
         </div>
-
 
         <div class="market-index-grid">
 
@@ -671,12 +279,15 @@ function renderMarketRegime() {
 
         </div>
 
-
         <div class="market-environment-grid">
 
             ${renderEnvironment(
-                "Equity / Swing",
-                market.equity_environment ||
+                "Equity",
+                market.equity_environment
+            )}
+
+            ${renderEnvironment(
+                "Swing",
                 market.swing_environment
             )}
 
@@ -697,30 +308,24 @@ function renderMarketRegime() {
 
         </div>
 
+        ${renderMarketAnalysis(
+            market.market_analysis
+        )}
     `;
 }
-
-
-// ============================================================
-// MARKET INDEX CARD
-// ============================================================
 
 function renderMarketIndexCard(
     title,
     indexData
 ) {
-
     if (
         !indexData ||
         Object.keys(indexData).length === 0
     ) {
-
         return `
             <div class="market-index-card">
 
-                <h4>
-                    ${escapeHtml(title)}
-                </h4>
+                <h4>${title}</h4>
 
                 <div class="muted">
                     Data unavailable
@@ -730,9 +335,12 @@ function renderMarketIndexCard(
         `;
     }
 
+    const priceLabel =
+        isValidNumber(indexData.price)
+            ? "Last Close"
+            : "Price";
 
     return `
-
         <div class="market-index-card">
 
             <h4>
@@ -743,6 +351,27 @@ function renderMarketIndexCard(
                 ${formatPrice(indexData.price)}
             </div>
 
+            <div class="index-price-label">
+                ${priceLabel}
+            </div>
+
+            ${
+                isValidNumber(
+                    indexData.previous_close
+                )
+                    ? `
+                        <div class="index-secondary">
+                            Previous Close:
+                            <strong>
+                                ${formatPrice(
+                                    indexData.previous_close
+                                )}
+                            </strong>
+                        </div>
+                    `
+                    : ""
+            }
+
             <div class="${getChangeClass(
                 indexData.daily_return_pct
             )}">
@@ -750,7 +379,6 @@ function renderMarketIndexCard(
                     indexData.daily_return_pct
                 )}
             </div>
-
 
             <div class="index-meta">
 
@@ -763,7 +391,6 @@ function renderMarketIndexCard(
                     </strong>
                 </span>
 
-
                 <span>
                     Momentum:
                     <strong>
@@ -772,7 +399,6 @@ function renderMarketIndexCard(
                         )}
                     </strong>
                 </span>
-
 
                 <span>
                     RSI:
@@ -786,28 +412,18 @@ function renderMarketIndexCard(
             </div>
 
         </div>
-
     `;
 }
 
-
-// ============================================================
-// INDIA VIX
-// ============================================================
-
 function renderVixCard(vix) {
-
     if (
         !vix ||
         Object.keys(vix).length === 0
     ) {
-
         return `
             <div class="market-index-card">
 
-                <h4>
-                    INDIA VIX
-                </h4>
+                <h4>INDIA VIX</h4>
 
                 <div class="muted">
                     Data unavailable
@@ -817,17 +433,17 @@ function renderVixCard(vix) {
         `;
     }
 
-
     return `
-
         <div class="market-index-card">
 
-            <h4>
-                INDIA VIX
-            </h4>
+            <h4>INDIA VIX</h4>
 
             <div class="index-price">
                 ${formatNumber(vix.price)}
+            </div>
+
+            <div class="index-price-label">
+                Last Available Close
             </div>
 
             <div class="${getChangeClass(
@@ -852,65 +468,203 @@ function renderVixCard(vix) {
             </div>
 
         </div>
-
     `;
 }
-
-
-// ============================================================
-// MARKET ENVIRONMENT
-// ============================================================
 
 function renderEnvironment(
     title,
     value
 ) {
-
     return `
-
         <div class="environment-card">
 
             <span class="environment-title">
                 ${escapeHtml(title)}
             </span>
 
-            <strong class="${getEnvironmentClass(value)}">
+            <strong class="${getEnvironmentClass(
+                value
+            )}">
                 ${escapeHtml(
-                    value ||
-                    "Unavailable"
+                    value || "Unavailable"
                 )}
             </strong>
 
         </div>
-
     `;
 }
 
+// ============================================================
+// MARKET ANALYSIS
+// ============================================================
+
+function renderMarketAnalysis(
+    analysis
+) {
+    if (
+        !analysis ||
+        Object.keys(analysis).length === 0
+    ) {
+        return "";
+    }
+
+    const support =
+        firstValue(
+            analysis.support,
+            analysis.support_zone,
+            analysis.next_day_support
+        );
+
+    const resistance =
+        firstValue(
+            analysis.resistance,
+            analysis.resistance_zone,
+            analysis.next_day_resistance
+        );
+
+    const pivot =
+        firstValue(
+            analysis.pivot,
+            analysis.pivot_point
+        );
+
+    const bullish =
+        firstValue(
+            analysis.bullish_trigger,
+            analysis.bullish_trigger_level
+        );
+
+    const bearish =
+        firstValue(
+            analysis.bearish_trigger,
+            analysis.bearish_trigger_level
+        );
+
+    const scenario =
+        firstValue(
+            analysis.scenario,
+            analysis.next_day_scenario,
+            analysis.explanation
+        );
+
+    if (
+        !isValidNumber(support) &&
+        !isValidNumber(resistance) &&
+        !isValidNumber(pivot) &&
+        !isValidNumber(bullish) &&
+        !isValidNumber(bearish) &&
+        !scenario
+    ) {
+        return "";
+    }
+
+    return `
+        <div class="market-analysis-panel">
+
+            <div class="section-heading">
+
+                <h3>
+                    Next-Day Market Analysis
+                </h3>
+
+                <span>
+                    Reference levels from latest
+                    available data
+                </span>
+
+            </div>
+
+            <div class="market-analysis-grid">
+
+                ${analysisMetric(
+                    "Support",
+                    support
+                )}
+
+                ${analysisMetric(
+                    "Pivot",
+                    pivot
+                )}
+
+                ${analysisMetric(
+                    "Resistance",
+                    resistance
+                )}
+
+                ${analysisMetric(
+                    "Bullish Trigger",
+                    bullish
+                )}
+
+                ${analysisMetric(
+                    "Bearish Trigger",
+                    bearish
+                )}
+
+            </div>
+
+            ${
+                scenario
+                    ? `
+                        <div class="market-scenario">
+
+                            <strong>
+                                Scenario
+                            </strong>
+
+                            <p>
+                                ${escapeHtml(
+                                    scenario
+                                )}
+                            </p>
+
+                        </div>
+                    `
+                    : ""
+            }
+
+        </div>
+    `;
+}
+
+function analysisMetric(
+    label,
+    value
+) {
+    return `
+        <div class="analysis-metric">
+
+            <span>
+                ${escapeHtml(label)}
+            </span>
+
+            <strong>
+                ${formatPrice(value)}
+            </strong>
+
+        </div>
+    `;
+}
 
 // ============================================================
 // MARKET BREADTH
 // ============================================================
 
 function renderBreadth() {
-
     const container =
         document.getElementById(
             "breadthCards"
         );
 
-    if (!container) {
-        return;
-    }
+    if (!container) return;
 
     const breadth =
         dashboardData.breadth || {};
-
 
     if (
         !breadth ||
         Object.keys(breadth).length === 0
     ) {
-
         container.innerHTML = `
             <div class="empty-state">
                 Market breadth data unavailable.
@@ -920,8 +674,7 @@ function renderBreadth() {
         return;
     }
 
-
-    const stocksAnalyzed =
+    const total =
         breadth.stocks_analyzed;
 
     const above20 =
@@ -939,116 +692,78 @@ function renderBreadth() {
     const lowCount =
         breadth.low_52w_count;
 
-    const highLowRatio =
-        breadth.high_low_ratio;
-
-    const breadthScore =
-        breadth.breadth_score;
-
-    const regime =
-        breadth.breadth_regime;
-
-
     container.innerHTML = `
 
         ${breadthCard(
             "Stocks Analysed",
-            formatInteger(
-                stocksAnalyzed
-            ),
+            formatInteger(total),
             ""
         )}
-
 
         ${breadthCard(
             "Above 20 DMA",
-            formatInteger(
-                above20
-            ),
+            formatInteger(above20),
             percentageOf(
                 above20,
-                stocksAnalyzed
+                total
             )
         )}
-
 
         ${breadthCard(
             "Above 50 DMA",
-            formatInteger(
-                above50
-            ),
+            formatInteger(above50),
             percentageOf(
                 above50,
-                stocksAnalyzed
+                total
             )
         )}
-
 
         ${breadthCard(
             "Above 200 DMA",
-            formatInteger(
-                above200
-            ),
+            formatInteger(above200),
             percentageOf(
                 above200,
-                stocksAnalyzed
+                total
             )
         )}
 
-
         ${breadthCard(
             "52W Highs",
-            formatInteger(
-                highCount
-            ),
+            formatInteger(highCount),
             ""
         )}
-
 
         ${breadthCard(
             "52W Lows",
-            formatInteger(
-                lowCount
-            ),
+            formatInteger(lowCount),
             ""
         )}
-
 
         ${breadthCard(
             "High / Low",
             formatNumber(
-                highLowRatio
+                breadth.high_low_ratio
             ),
             ""
         )}
 
-
         ${breadthCard(
             "Breadth Score",
             formatNumber(
-                breadthScore
+                breadth.breadth_score
             ),
-            escapeHtml(
-                regime || ""
-            )
+            breadth.breadth_regime || ""
         )}
 
     `;
 }
-
-
-// ============================================================
-// BREADTH CARD
-// ============================================================
 
 function breadthCard(
     title,
     value,
     subtitle
 ) {
-
     return `
-
         <div class="breadth-card">
 
             <div class="breadth-title">
@@ -1063,42 +778,37 @@ function breadthCard(
                 subtitle
                     ? `
                         <div class="breadth-subtitle">
-                            ${subtitle}
+                            ${escapeHtml(
+                                subtitle
+                            )}
                         </div>
-                      `
+                    `
                     : ""
             }
 
         </div>
-
     `;
 }
-
 
 // ============================================================
 // SECTORS
 // ============================================================
 
 function renderSectors() {
-
     const container =
         document.getElementById(
             "sectorTable"
         );
 
-    if (!container) {
-        return;
-    }
+    if (!container) return;
 
     const sectors =
         dashboardData.sectors || [];
-
 
     if (
         !Array.isArray(sectors) ||
         sectors.length === 0
     ) {
-
         container.innerHTML = `
             <div class="empty-state">
                 Sector data unavailable.
@@ -1108,94 +818,71 @@ function renderSectors() {
         return;
     }
 
-
     const rows =
         sectors
             .map(
-                (sector, index) => {
+                (sector, index) => `
+                    <tr>
 
-                    return `
+                        <td>
+                            ${index + 1}
+                        </td>
 
-                        <tr>
-
-                            <td>
-                                ${index + 1}
-                            </td>
-
-
-                            <td>
-                                <strong>
-                                    ${escapeHtml(
-                                        sector.sector ||
-                                        sector.name ||
-                                        "-"
-                                    )}
-                                </strong>
-                            </td>
-
-
-                            <td>
-
-                                <span class="status-badge ${
-                                    getSectorClass(
-                                        sector.strength
-                                    )
-                                }">
-
-                                    ${escapeHtml(
-                                        sector.strength ||
-                                        sector.sector_strength ||
-                                        "-"
-                                    )}
-
-                                </span>
-
-                            </td>
-
-
-                            <td>
+                        <td>
+                            <strong>
                                 ${escapeHtml(
-                                    sector.trend ||
+                                    sector.sector ||
+                                    sector.name ||
                                     "-"
                                 )}
-                            </td>
+                            </strong>
+                        </td>
 
-
-                            <td>
-                                ${escapeHtml(
-                                    sector.momentum ||
-                                    "-"
-                                )}
-                            </td>
-
-
-                            <td class="${getChangeClass(
-                                sector.performance_20d_pct
+                        <td>
+                            <span class="status-badge ${getSectorClass(
+                                sector.strength
                             )}">
-
-                                ${formatSignedPercent(
-                                    sector.performance_20d_pct
+                                ${escapeHtml(
+                                    sector.strength ||
+                                    "-"
                                 )}
+                            </span>
+                        </td>
 
-                            </td>
+                        <td>
+                            ${escapeHtml(
+                                sector.trend ||
+                                "-"
+                            )}
+                        </td>
 
+                        <td>
+                            ${escapeHtml(
+                                sector.momentum ||
+                                "-"
+                            )}
+                        </td>
 
-                            <td>
-                                ${formatNumber(
-                                    sector.score
-                                )}
-                            </td>
+                        <td class="${getChangeClass(
+                            sector.performance_20d_pct
+                        )}">
+                            ${formatSignedPercent(
+                                sector.performance_20d_pct
+                            )}
+                        </td>
 
-                        </tr>
+                        <td>
+                            ${formatNumber(
+                                sector.score
+                            )}
+                        </td>
 
-                    `;
-                }
+                    </tr>
+                `
             )
             .join("");
 
-
     container.innerHTML = `
-
         <div class="table-wrapper">
 
             <table class="dashboard-table">
@@ -1203,7 +890,6 @@ function renderSectors() {
                 <thead>
 
                     <tr>
-
                         <th>#</th>
                         <th>Sector</th>
                         <th>Strength</th>
@@ -1211,11 +897,9 @@ function renderSectors() {
                         <th>Momentum</th>
                         <th>20D Performance</th>
                         <th>Score</th>
-
                     </tr>
 
                 </thead>
-
 
                 <tbody>
                     ${rows}
@@ -1224,111 +908,67 @@ function renderSectors() {
             </table>
 
         </div>
-
     `;
 }
-
 
 // ============================================================
 // WATCHLISTS
 // ============================================================
 
 function renderWatchlists() {
-
     setupWatchlistTabs();
-
 
     const activeTab =
         document.querySelector(
             ".watchlist-tab.active"
         );
 
-
-    let watchlist =
+    const watchlist =
+        activeTab?.dataset.watchlist ||
         "next_day";
 
-
-    if (activeTab) {
-
-        watchlist =
-            activeTab.dataset.watchlist;
-    }
-
-
-    renderWatchlist(
-        watchlist
-    );
+    renderWatchlist(watchlist);
 }
 
-
-// ============================================================
-// WATCHLIST TABS
-// ============================================================
-
 function setupWatchlistTabs() {
-
     const tabs =
         document.querySelectorAll(
             ".watchlist-tab"
         );
 
+    tabs.forEach(tab => {
 
-    tabs.forEach(
-        tab => {
-
-            // Prevent duplicate listeners
-            if (
-                tab.dataset.listenerAttached ===
-                "true"
-            ) {
-                return;
-            }
-
-
-            tab.dataset.listenerAttached =
-                "true";
-
-
-            tab.addEventListener(
-                "click",
-                () => {
-
-                    tabs.forEach(
-                        item =>
-                            item.classList.remove(
-                                "active"
-                            )
-                    );
-
-
-                    tab.classList.add(
-                        "active"
-                    );
-
-
-                    const watchlist =
-                        tab.dataset.watchlist;
-
-
-                    renderWatchlist(
-                        watchlist
-                    );
-                }
-            );
-
+        if (
+            tab.dataset.bound === "true"
+        ) {
+            return;
         }
-    );
+
+        tab.dataset.bound = "true";
+
+        tab.addEventListener(
+            "click",
+            () => {
+
+                tabs.forEach(item =>
+                    item.classList.remove(
+                        "active"
+                    )
+                );
+
+                tab.classList.add(
+                    "active"
+                );
+
+                renderWatchlist(
+                    tab.dataset.watchlist
+                );
+            }
+        );
+    });
 }
 
-
-// ============================================================
-// RENDER WATCHLIST
-// ============================================================
-
-function renderWatchlist(
-    name
-) {
-
+function renderWatchlist(name) {
     const container =
         document.getElementById(
             "stockTable"
@@ -1339,88 +979,50 @@ function renderWatchlist(
             "watchlistCount"
         );
 
-
-    if (!container) {
-        return;
-    }
-
+    if (!container) return;
 
     const watchlists =
-        dashboardData.watchlists ||
-        {};
-
+        dashboardData.watchlists || {};
 
     let stocks =
-        watchlists[name] ||
-        [];
-
+        watchlists[name] || [];
 
     if (!Array.isArray(stocks)) {
         stocks = [];
     }
 
-
-    stocks =
-        stocks.map(
-            normalizeStock
-        );
-
-
     if (countContainer) {
 
         countContainer.innerHTML = `
-
             ${formatInteger(
                 stocks.length
             )}
-
             stocks in
-
             <strong>
                 ${escapeHtml(
                     WATCHLIST_NAMES[name] ||
                     name
                 )}
             </strong>
-
         `;
     }
 
-
-    renderDownloadButton(
-        name,
-        stocks.length
-    );
-
+    renderDownloadButton(name);
 
     if (stocks.length === 0) {
 
         container.innerHTML = `
-
             <div class="empty-state">
-
                 No stocks currently match
                 this watchlist.
-
             </div>
-
         `;
 
         return;
     }
 
-
-    // --------------------------------------------------------
-    // Dashboard displays top 15.
-    // Excel contains the complete list.
-    // --------------------------------------------------------
-
     const visibleStocks =
-        stocks.slice(
-            0,
-            15
-        );
-
+        stocks.slice(0, 15);
 
     const rows =
         visibleStocks
@@ -1432,7 +1034,6 @@ function renderWatchlist(
                     )
             )
             .join("");
-
 
     container.innerHTML = `
 
@@ -1451,16 +1052,19 @@ function renderWatchlist(
                         <th>Trend</th>
                         <th>Momentum</th>
                         <th>RSI</th>
-                        <th>Vol Ratio</th>
+                        <th>Vol</th>
                         <th>52W High</th>
                         <th>200 DMA</th>
                         <th>Setup</th>
-                        <th>Rating</th>
+                        <th>Entry</th>
+                        <th>SL</th>
+                        <th>T1</th>
+                        <th>R:R</th>
+                        <th>Score</th>
 
                     </tr>
 
                 </thead>
-
 
                 <tbody>
                     ${rows}
@@ -1470,74 +1074,56 @@ function renderWatchlist(
 
         </div>
 
-
         ${
             stocks.length > 15
-
                 ? `
-
                     <div class="table-note">
-
                         Showing top 15 of
                         ${formatInteger(
                             stocks.length
                         )}.
-
                         Download Excel for
                         the complete list.
-
                     </div>
-
-                  `
-
+                `
                 : ""
         }
 
     `;
 }
 
-
-// ============================================================
-// STOCK ROW
-// ============================================================
-
 function renderStockRow(
     stock,
     rank
 ) {
-
     const symbol =
         stock.symbol ||
         stock.nse_symbol ||
         "-";
 
-
     const price =
         stock.price ??
         stock.close;
-
 
     const change =
         stock.daily_return_pct ??
         stock.change_pct;
 
-
     const rating =
         stock.overall_score ??
         stock.rating;
 
-
     return `
-
         <tr
             class="stock-row"
-            onclick="openStockDetail('${escapeJs(symbol)}')"
+            onclick="openStockDetail('${escapeJs(
+                symbol
+            )}')"
         >
 
             <td>
                 ${rank}
             </td>
-
 
             <td>
 
@@ -1545,37 +1131,31 @@ function renderStockRow(
                     ${escapeHtml(symbol)}
                 </div>
 
-
                 ${
                     stock.company_name
-
                         ? `
-
                             <div class="stock-company">
-
                                 ${escapeHtml(
                                     stock.company_name
                                 )}
-
                             </div>
-
-                          `
-
+                        `
                         : ""
                 }
 
             </td>
 
-
             <td>
                 ${formatPrice(price)}
             </td>
 
-
-            <td class="${getChangeClass(change)}">
-                ${formatSignedPercent(change)}
+            <td class="${getChangeClass(
+                change
+            )}">
+                ${formatSignedPercent(
+                    change
+                )}
             </td>
-
 
             <td>
                 ${statusBadge(
@@ -1583,20 +1163,17 @@ function renderStockRow(
                 )}
             </td>
 
-
             <td>
                 ${statusBadge(
                     stock.momentum
                 )}
             </td>
 
-
             <td>
                 ${formatNumber(
                     stock.rsi14
                 )}
             </td>
-
 
             <td>
                 ${formatNumber(
@@ -1605,13 +1182,11 @@ function renderStockRow(
                 )}x
             </td>
 
-
             <td>
                 ${formatPercent(
                     stock.distance_from_52w_high_pct
                 )}
             </td>
-
 
             <td>
                 ${formatPercent(
@@ -1619,13 +1194,48 @@ function renderStockRow(
                 )}
             </td>
 
-
             <td>
                 ${setupBadge(
                     stock.setup
                 )}
             </td>
 
+            <td class="trade-entry">
+                ${formatPrice(
+                    tradeValue(
+                        stock,
+                        "entry_price"
+                    )
+                )}
+            </td>
+
+            <td class="trade-stop">
+                ${formatPrice(
+                    tradeValue(
+                        stock,
+                        "stop_loss"
+                    )
+                )}
+            </td>
+
+            <td class="trade-target">
+                ${formatPrice(
+                    tradeValue(
+                        stock,
+                        "target_1"
+                    )
+                )}
+            </td>
+
+            <td class="${riskRewardClass(
+                stock.risk_reward_1 ??
+                stock.risk_reward
+            )}">
+                ${formatRiskReward(
+                    stock.risk_reward_1 ??
+                    stock.risk_reward
+                )}
+            </td>
 
             <td>
                 <strong>
@@ -1636,133 +1246,82 @@ function renderStockRow(
             </td>
 
         </tr>
-
     `;
 }
 
-
 // ============================================================
-// DOWNLOAD EXCEL
+// DOWNLOAD
 // ============================================================
 
-function renderDownloadButton(
-    name,
-    count
-) {
-
+function renderDownloadButton(name) {
     const countContainer =
         document.getElementById(
             "watchlistCount"
         );
 
-
-    if (!countContainer) {
-        return;
-    }
-
+    if (!countContainer) return;
 
     const file =
         WATCHLIST_FILES[name];
 
-
-    if (!file) {
-        return;
-    }
-
+    if (!file) return;
 
     const existing =
         document.getElementById(
             "watchlistDownload"
         );
 
-
     if (existing) {
         existing.remove();
     }
 
-
     const button =
-        document.createElement(
-            "a"
-        );
-
+        document.createElement("a");
 
     button.id =
         "watchlistDownload";
 
-
     button.className =
         "download-button";
 
-
     button.href =
-        "output/exports/" +
-        file;
+        "output/exports/" + file;
 
+    button.download = file;
 
-    button.download =
-        file;
+    button.target = "_blank";
 
-
-    button.target =
-        "_blank";
-
-
-    button.rel =
-        "noopener";
-
+    button.rel = "noopener";
 
     button.textContent =
         "Download Excel";
-
 
     countContainer.appendChild(
         button
     );
 }
 
-
 // ============================================================
-// STOCK DETAIL MODAL
+// STOCK DETAIL
 // ============================================================
 
-function openStockDetail(
-    symbol
-) {
-
-    if (!dashboardData) {
-        return;
-    }
-
+function openStockDetail(symbol) {
+    if (!dashboardData) return;
 
     const stocks =
-        dashboardData.stocks ||
-        [];
-
+        dashboardData.stocks || [];
 
     const stock =
-        stocks.find(
-            item => {
-
-                const itemSymbol =
-                    item.symbol ||
-                    item.nse_symbol ||
-                    "";
-
-
-                return String(
-                    itemSymbol
-                ).toUpperCase() ===
-                String(
-                    symbol
-                ).toUpperCase();
-
-            }
+        stocks.find(item =>
+            String(
+                item.symbol ||
+                item.nse_symbol ||
+                ""
+            ).toUpperCase() ===
+            String(symbol).toUpperCase()
         );
 
-
     if (!stock) {
-
         console.warn(
             "Stock not found:",
             symbol
@@ -1771,82 +1330,108 @@ function openStockDetail(
         return;
     }
 
-
     const modal =
         document.getElementById(
             "stockModal"
         );
-
 
     const detail =
         document.getElementById(
             "stockDetail"
         );
 
-
-    if (!modal || !detail) {
-        return;
-    }
-
+    if (!modal || !detail) return;
 
     detail.innerHTML =
-        buildStockDetail(
-            normalizeStock(stock)
-        );
+        buildStockDetail(stock);
 
-
-    modal.classList.add(
-        "active"
-    );
-
+    modal.classList.add("open");
+    modal.classList.add("active");
 
     document.body.classList.add(
         "modal-open"
     );
 }
 
-
-// ============================================================
-// CLOSE MODAL
-// ============================================================
-
 function closeStockModal() {
-
     const modal =
         document.getElementById(
             "stockModal"
         );
 
+    if (!modal) return;
 
-    if (!modal) {
-        return;
-    }
-
-
-    modal.classList.remove(
-        "active"
-    );
-
+    modal.classList.remove("open");
+    modal.classList.remove("active");
 
     document.body.classList.remove(
         "modal-open"
     );
 }
 
-
-// ============================================================
-// STOCK DETAIL
-// ============================================================
-
-function buildStockDetail(
-    stock
-) {
-
+function buildStockDetail(stock) {
     const symbol =
         stock.symbol ||
         stock.nse_symbol ||
         "-";
 
+    const entry =
+        tradeValue(
+            stock,
+            "entry_price"
+        );
+
+    const entryLow =
+        tradeValue(
+            stock,
+            "entry_low"
+        );
+
+    const entryHigh =
+        tradeValue(
+            stock,
+            "entry_high"
+        );
+
+    const stop =
+        tradeValue(
+            stock,
+            "stop_loss"
+        );
+
+    const target1 =
+        tradeValue(
+            stock,
+            "target_1"
+        );
+
+    const target2 =
+        tradeValue(
+            stock,
+            "target_2"
+        );
+
+    const rr1 =
+        stock.risk_reward_1 ??
+        stock.risk_reward;
+
+    const rr2 =
+        stock.risk_reward_2;
+
+    const planStatus =
+        stock.trade_plan_status;
+
+    const planType =
+        stock.trade_plan_type;
+
+    const planReason =
+        stock.trade_plan_reason;
+
+    const invalidation =
+        stock.invalidation;
+
+    const quality =
+        stock.trade_plan_quality;
 
     return `
 
@@ -1858,25 +1443,19 @@ function buildStockDetail(
                     ${escapeHtml(symbol)}
                 </h2>
 
-
                 ${
                     stock.company_name
-
                         ? `
-
                             <p>
                                 ${escapeHtml(
                                     stock.company_name
                                 )}
                             </p>
-
-                          `
-
+                        `
                         : ""
                 }
 
             </div>
-
 
             <div class="detail-rating">
 
@@ -1895,49 +1474,28 @@ function buildStockDetail(
 
         </div>
 
-
-        ${detailSection(
-            "Trading Setup",
-            [
-
-                detailItem(
-                    "Setup",
-                    stock.setup
-                ),
-
-                detailItem(
-                    "Technical Score",
-                    stock.technical_score
-                ),
-
-                detailItem(
-                    "Fundamental Score",
-                    stock.fundamental_score
-                ),
-
-                detailItem(
-                    "Sector Score",
-                    stock.sector_score
-                ),
-
-                detailItem(
-                    "Rating",
-                    stock.rating
-                ),
-
-                detailItem(
-                    "Risk / Reward",
-                    stock.risk_reward
-                )
-
-            ]
+        ${renderTradePlan(
+            stock,
+            {
+                entry,
+                entryLow,
+                entryHigh,
+                stop,
+                target1,
+                target2,
+                rr1,
+                rr2,
+                planStatus,
+                planType,
+                planReason,
+                invalidation,
+                quality
+            }
         )}
-
 
         ${detailSection(
             "Price & Trend",
             [
-
                 detailItem(
                     "Price",
                     formatPrice(
@@ -1972,16 +1530,61 @@ function buildStockDetail(
                 detailItem(
                     "Breakout",
                     stock.breakout_status
-                )
+                ),
 
+                detailItem(
+                    "Setup",
+                    stock.setup
+                )
             ]
         )}
 
+        ${detailSection(
+            "Technical Scores",
+            [
+                detailItem(
+                    "Technical Score",
+                    formatNumber(
+                        stock.technical_score
+                    )
+                ),
+
+                detailItem(
+                    "Fundamental Score",
+                    formatNumber(
+                        stock.fundamental_score
+                    )
+                ),
+
+                detailItem(
+                    "Sector Score",
+                    formatNumber(
+                        stock.sector_score
+                    )
+                ),
+
+                detailItem(
+                    "Overall Score",
+                    formatNumber(
+                        stock.overall_score
+                    )
+                ),
+
+                detailItem(
+                    "Technical Rating",
+                    stock.technical_rating
+                ),
+
+                detailItem(
+                    "Fundamental Status",
+                    stock.fundamental_status
+                )
+            ]
+        )}
 
         ${detailSection(
             "Moving Averages",
             [
-
                 detailItem(
                     "SMA 20",
                     formatPrice(
@@ -2030,15 +1633,12 @@ function buildStockDetail(
                         stock.ema50
                     )
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Momentum & Volatility",
             [
-
                 detailItem(
                     "RSI 14",
                     formatNumber(
@@ -2049,7 +1649,8 @@ function buildStockDetail(
                 detailItem(
                     "ATR 14",
                     formatPrice(
-                        stock.atr14
+                        stock.atr14 ??
+                        stock.ATR14
                     )
                 ),
 
@@ -2076,31 +1677,38 @@ function buildStockDetail(
 
                 detailItem(
                     "Volume Ratio",
-                    formatNumber(
-                        stock.volume_ratio,
-                        2
-                    ) + "x"
+                    isValidNumber(
+                        stock.volume_ratio
+                    )
+                        ? formatNumber(
+                            stock.volume_ratio,
+                            2
+                        ) + "x"
+                        : "Unavailable"
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "52 Week & 200 DMA",
             [
-
                 detailItem(
                     "52W High",
                     formatPrice(
-                        stock["52w_high"]
+                        firstValue(
+                            stock["52w_high"],
+                            stock["52W_High"]
+                        )
                     )
                 ),
 
                 detailItem(
                     "52W Low",
                     formatPrice(
-                        stock["52w_low"]
+                        firstValue(
+                            stock["52w_low"],
+                            stock["52W_Low"]
+                        )
                     )
                 ),
 
@@ -2131,15 +1739,12 @@ function buildStockDetail(
                         stock.above_200dma
                     )
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Support & Resistance",
             [
-
                 detailItem(
                     "Support",
                     formatPrice(
@@ -2152,21 +1757,29 @@ function buildStockDetail(
                     formatPrice(
                         stock.resistance
                     )
-                )
+                ),
 
+                detailItem(
+                    "Support Zone",
+                    formatZone(
+                        stock.support_low,
+                        stock.support_high
+                    )
+                ),
+
+                detailItem(
+                    "Resistance Zone",
+                    formatZone(
+                        stock.resistance_low,
+                        stock.resistance_high
+                    )
+                )
             ]
         )}
-
 
         ${detailSection(
             "Fundamental Quality",
             [
-
-                detailItem(
-                    "Fundamental Status",
-                    stock.fundamental_status
-                ),
-
                 detailItem(
                     "Fundamental Quality",
                     stock.fundamental_quality
@@ -2195,15 +1808,12 @@ function buildStockDetail(
                     "Industry",
                     stock.industry
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Growth & Profitability",
             [
-
                 detailItem(
                     "Revenue",
                     formatLargeNumber(
@@ -2300,15 +1910,12 @@ function buildStockDetail(
                         stock.ebitda_margin
                     )
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Returns & Balance Sheet",
             [
-
                 detailItem(
                     "ROE",
                     formatPercent(
@@ -2367,15 +1974,12 @@ function buildStockDetail(
                         stock.total_cash
                     )
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Valuation",
             [
-
                 detailItem(
                     "PE",
                     formatNumber(
@@ -2414,53 +2018,241 @@ function buildStockDetail(
                         stock.dividend_yield
                     )
                 )
-
             ]
         )}
-
 
         ${detailSection(
             "Why This Stock Appears",
             [
-
                 detailItem(
                     "Analysis",
                     stock.reasons ||
                     stock.reason ||
-                    "See technical and fundamental metrics above."
+                    "See technical, fundamental and trade-plan metrics above."
                 )
-
             ]
         )}
 
     `;
 }
 
+// ============================================================
+// TRADE PLAN
+// ============================================================
+
+function renderTradePlan(
+    stock,
+    plan
+) {
+    const usable =
+        plan.planStatus ||
+        plan.planType ||
+        isValidNumber(plan.entry) ||
+        isValidNumber(plan.stop);
+
+    if (!usable) {
+        return "";
+    }
+
+    const status =
+        plan.planStatus ||
+        "Unavailable";
+
+    const type =
+        plan.planType ||
+        "No Active Trade Plan";
+
+    const entryText =
+        isValidNumber(plan.entryLow) &&
+        isValidNumber(plan.entryHigh)
+            ? `${formatPrice(
+                plan.entryLow
+            )} – ${formatPrice(
+                plan.entryHigh
+            )}`
+            : formatPrice(
+                plan.entry
+            );
+
+    return `
+
+        <div class="trade-plan-panel">
+
+            <div class="trade-plan-header">
+
+                <div>
+
+                    <span class="trade-plan-label">
+                        Trade Plan
+                    </span>
+
+                    <h3>
+                        ${escapeHtml(type)}
+                    </h3>
+
+                </div>
+
+                <span class="trade-plan-status ${getTradePlanClass(
+                    status
+                )}">
+                    ${escapeHtml(status)}
+                </span>
+
+            </div>
+
+            <div class="trade-plan-grid">
+
+                <div class="trade-plan-card">
+                    <span>
+                        Entry Zone / Price
+                    </span>
+
+                    <strong>
+                        ${entryText}
+                    </strong>
+                </div>
+
+                <div class="trade-plan-card">
+                    <span>
+                        Stop Loss
+                    </span>
+
+                    <strong>
+                        ${formatPrice(
+                            plan.stop
+                        )}
+                    </strong>
+                </div>
+
+                <div class="trade-plan-card">
+                    <span>
+                        Target 1
+                    </span>
+
+                    <strong>
+                        ${formatPrice(
+                            plan.target1
+                        )}
+                    </strong>
+                </div>
+
+                <div class="trade-plan-card">
+                    <span>
+                        Target 2
+                    </span>
+
+                    <strong>
+                        ${formatPrice(
+                            plan.target2
+                        )}
+                    </strong>
+                </div>
+
+                <div class="trade-plan-card">
+
+                    <span>
+                        R:R to T1
+                    </span>
+
+                    <strong class="${riskRewardClass(
+                        plan.rr1
+                    )}">
+                        ${formatRiskReward(
+                            plan.rr1
+                        )}
+                    </strong>
+
+                </div>
+
+                <div class="trade-plan-card">
+
+                    <span>
+                        R:R to T2
+                    </span>
+
+                    <strong class="${riskRewardClass(
+                        plan.rr2
+                    )}">
+                        ${formatRiskReward(
+                            plan.rr2
+                        )}
+                    </strong>
+
+                </div>
+
+                <div class="trade-plan-card">
+
+                    <span>
+                        Trade Quality
+                    </span>
+
+                    <strong>
+                        ${escapeHtml(
+                            plan.quality ||
+                            "—"
+                        )}
+                    </strong>
+
+                </div>
+
+                <div class="trade-plan-card">
+
+                    <span>
+                        Invalidation
+                    </span>
+
+                    <strong>
+                        ${escapeHtml(
+                            plan.invalidation ||
+                            "—"
+                        )}
+                    </strong>
+
+                </div>
+
+            </div>
+
+            ${
+                plan.planReason
+                    ? `
+                        <div class="trade-plan-reason">
+
+                            <strong>
+                                Why:
+                            </strong>
+
+                            ${escapeHtml(
+                                plan.planReason
+                            )}
+
+                        </div>
+                    `
+                    : ""
+            }
+
+        </div>
+    `;
+}
 
 // ============================================================
-// DETAIL SECTION
+// DETAIL HELPERS
 // ============================================================
 
 function detailSection(
     title,
     items
 ) {
-
     const validItems =
         items.filter(
-            item =>
-                item !== ""
+            item => item !== ""
         );
 
-
     return `
-
         <div class="detail-section">
 
             <h3>
                 ${escapeHtml(title)}
             </h3>
-
 
             <div class="detail-grid">
 
@@ -2469,20 +2261,13 @@ function detailSection(
             </div>
 
         </div>
-
     `;
 }
-
-
-// ============================================================
-// DETAIL ITEM
-// ============================================================
 
 function detailItem(
     label,
     value
 ) {
-
     if (
         value === undefined ||
         value === null ||
@@ -2490,14 +2275,10 @@ function detailItem(
         value === "nan" ||
         value === "NaN"
     ) {
-
-        value =
-            "Unavailable";
+        value = "Unavailable";
     }
 
-
     return `
-
         <div class="detail-item">
 
             <span>
@@ -2511,10 +2292,8 @@ function detailItem(
             </strong>
 
         </div>
-
     `;
 }
-
 
 // ============================================================
 // MODAL EVENTS
@@ -2529,60 +2308,42 @@ document.addEventListener(
                 "stockModal"
             );
 
+        if (!modal) return;
 
-        if (!modal) {
-            return;
-        }
-
-
-        if (
-            event.target ===
-            modal
-        ) {
-
+        if (event.target === modal) {
             closeStockModal();
         }
 
     }
 );
-
 
 document.addEventListener(
     "keydown",
     event => {
 
         if (
-            event.key ===
-            "Escape"
+            event.key === "Escape"
         ) {
-
             closeStockModal();
         }
 
     }
 );
 
-
 // ============================================================
-// LAST UPDATED
+// STATUS
 // ============================================================
 
 function updateLastUpdated() {
-
     const element =
         document.getElementById(
             "lastUpdated"
         );
 
-
-    if (!element) {
-        return;
-    }
-
+    if (!element) return;
 
     const generated =
         dashboardData.generated_at;
-
 
     if (!generated) {
 
@@ -2592,17 +2353,11 @@ function updateLastUpdated() {
         return;
     }
 
-
     const date =
-        new Date(
-            generated
-        );
-
+        new Date(generated);
 
     if (
-        isNaN(
-            date.getTime()
-        )
+        isNaN(date.getTime())
     ) {
 
         element.textContent =
@@ -2612,68 +2367,208 @@ function updateLastUpdated() {
         return;
     }
 
-
     element.textContent =
         "Last updated: " +
         date.toLocaleString(
             "en-IN",
             {
-                dateStyle:
-                    "medium",
-
-                timeStyle:
-                    "short"
+                dateStyle: "medium",
+                timeStyle: "short"
             }
         );
 }
 
-
-// ============================================================
-// ERROR
-// ============================================================
-
 function showDashboardError(
     message
 ) {
-
-    const containers = [
-
+    [
         "marketRegime",
         "breadthCards",
         "sectorTable",
         "stockTable"
+    ].forEach(id => {
 
-    ];
+        const element =
+            document.getElementById(id);
 
+        if (element) {
 
-    containers.forEach(
-        id => {
-
-            const element =
-                document.getElementById(
-                    id
-                );
-
-
-            if (element) {
-
-                element.innerHTML = `
-
-                    <div class="error-state">
-
-                        ${escapeHtml(
-                            message
-                        )}
-
-                    </div>
-
-                `;
-            }
-
+            element.innerHTML = `
+                <div class="error-state">
+                    ${escapeHtml(
+                        message
+                    )}
+                </div>
+            `;
         }
+
+    });
+}
+
+// ============================================================
+// TRADE PLAN HELPERS
+// ============================================================
+
+function tradeValue(
+    stock,
+    key
+) {
+    const aliases = {
+
+        entry_price: [
+            "entry_price",
+            "entry",
+            "Entry_Price"
+        ],
+
+        entry_low: [
+            "entry_low",
+            "Entry_Low"
+        ],
+
+        entry_high: [
+            "entry_high",
+            "Entry_High"
+        ],
+
+        stop_loss: [
+            "stop_loss",
+            "stop",
+            "Stop_Loss"
+        ],
+
+        target_1: [
+            "target_1",
+            "target1",
+            "Target_1"
+        ],
+
+        target_2: [
+            "target_2",
+            "target2",
+            "Target_2"
+        ]
+    };
+
+    for (
+        const field of aliases[key] || []
+    ) {
+
+        if (
+            isValidNumber(
+                stock[field]
+            )
+        ) {
+            return Number(
+                stock[field]
+            );
+        }
+    }
+
+    return null;
+}
+
+function formatRiskReward(
+    value
+) {
+    if (
+        !isValidNumber(value)
+    ) {
+        return "—";
+    }
+
+    return (
+        Number(value).toFixed(2) +
+        "x"
     );
 }
 
+function riskRewardClass(
+    value
+) {
+    if (
+        !isValidNumber(value)
+    ) {
+        return "";
+    }
+
+    const rr =
+        Number(value);
+
+    if (rr >= 2) {
+        return "positive";
+    }
+
+    if (rr >= 1.5) {
+        return "neutral";
+    }
+
+    return "negative";
+}
+
+function getTradePlanClass(
+    value
+) {
+    const text =
+        String(value || "")
+            .toLowerCase();
+
+    if (
+        text.includes("active") ||
+        text.includes("strong") ||
+        text.includes("confirmed")
+    ) {
+        return "trade-plan-positive";
+    }
+
+    if (
+        text.includes("confirmation") ||
+        text.includes("watch") ||
+        text.includes("pending")
+    ) {
+        return "trade-plan-watch";
+    }
+
+    if (
+        text.includes("weak") ||
+        text.includes("avoid") ||
+        text.includes("invalid")
+    ) {
+        return "trade-plan-negative";
+    }
+
+    return "trade-plan-neutral";
+}
+
+function formatZone(
+    low,
+    high
+) {
+    if (
+        isValidNumber(low) &&
+        isValidNumber(high)
+    ) {
+        return `${formatPrice(
+            low
+        )} – ${formatPrice(
+            high
+        )}`;
+    }
+
+    if (
+        isValidNumber(low)
+    ) {
+        return formatPrice(low);
+    }
+
+    if (
+        isValidNumber(high)
+    ) {
+        return formatPrice(high);
+    }
+
+    return "—";
+}
 
 // ============================================================
 // FORMATTING
@@ -2683,41 +2578,33 @@ function formatNumber(
     value,
     decimals = 2
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
 
+    return Number(value)
+        .toLocaleString(
+            "en-IN",
+            {
+                minimumFractionDigits:
+                    decimals,
 
-    return Number(
-        value
-    ).toLocaleString(
-        "en-IN",
-        {
-            minimumFractionDigits:
-                decimals,
-
-            maximumFractionDigits:
-                decimals
-        }
-    );
+                maximumFractionDigits:
+                    decimals
+            }
+        );
 }
-
 
 function formatInteger(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
-
 
     return Math.round(
         Number(value)
@@ -2726,465 +2613,371 @@ function formatInteger(
     );
 }
 
-
 function formatPrice(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
 
-
-    return "₹" +
-        Number(value).toLocaleString(
-            "en-IN",
-            {
-                minimumFractionDigits:
-                    2,
-
-                maximumFractionDigits:
-                    2
-            }
-        );
+    return (
+        "₹" +
+        Number(value)
+            .toLocaleString(
+                "en-IN",
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            )
+    );
 }
-
 
 function formatLargeNumber(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
 
-
     const number =
         Number(value);
-
 
     if (
         Math.abs(number) >=
         1e12
     ) {
-
-        return "₹" +
+        return (
+            "₹" +
             (
                 number / 1e12
             ).toFixed(2) +
-            " T";
+            " T"
+        );
     }
-
 
     if (
         Math.abs(number) >=
         1e9
     ) {
-
-        return "₹" +
+        return (
+            "₹" +
             (
                 number / 1e9
             ).toFixed(2) +
-            " B";
+            " B"
+        );
     }
-
 
     if (
         Math.abs(number) >=
         1e7
     ) {
-
-        return "₹" +
+        return (
+            "₹" +
             (
                 number / 1e7
             ).toFixed(2) +
-            " Cr";
+            " Cr"
+        );
     }
-
 
     if (
         Math.abs(number) >=
         1e5
     ) {
-
-        return "₹" +
+        return (
+            "₹" +
             (
                 number / 1e5
             ).toFixed(2) +
-            " L";
+            " L"
+        );
     }
 
-
-    return "₹" +
+    return (
+        "₹" +
         number.toLocaleString(
             "en-IN",
             {
-                maximumFractionDigits:
-                    0
+                maximumFractionDigits: 0
             }
-        );
+        )
+    );
 }
-
 
 function formatPercent(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
 
-
-    return Number(value)
-        .toFixed(2) +
-        "%";
+    return (
+        Number(value).toFixed(2) +
+        "%"
+    );
 }
-
 
 function formatSignedPercent(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "—";
     }
 
-
     const number =
         Number(value);
-
 
     const sign =
         number > 0
             ? "+"
             : "";
 
-
-    return sign +
+    return (
+        sign +
         number.toFixed(2) +
-        "%";
+        "%"
+    );
 }
-
 
 function formatBoolean(
     value
 ) {
-
     if (
         value === true ||
         value === "true" ||
         value === 1
     ) {
-
         return "Yes";
     }
-
 
     if (
         value === false ||
         value === "false" ||
         value === 0
     ) {
-
         return "No";
     }
 
-
     return "—";
 }
-
 
 function percentageOf(
     value,
     total
 ) {
-
     if (
         !isValidNumber(value) ||
         !isValidNumber(total) ||
         Number(total) === 0
     ) {
-
         return "";
     }
 
-
     return (
-        Number(value) /
-        Number(total) *
-        100
-    ).toFixed(2) +
-    "%";
+        (
+            Number(value) /
+            Number(total) *
+            100
+        ).toFixed(2) +
+        "%"
+    );
 }
-
 
 function isValidNumber(
     value
 ) {
-
     if (
         value === null ||
         value === undefined ||
-        value === ""
+        value === "" ||
+        typeof value === "boolean"
     ) {
-
         return false;
     }
 
-
     const number =
         Number(value);
-
 
     return Number.isFinite(
         number
     );
 }
 
+function firstValue(
+    ...values
+) {
+    for (
+        const value of values
+    ) {
+
+        if (
+            value !== undefined &&
+            value !== null &&
+            value !== ""
+        ) {
+            return value;
+        }
+    }
+
+    return null;
+}
 
 // ============================================================
-// CHANGE CLASS
+// CSS / BADGES
 // ============================================================
 
 function getChangeClass(
     value
 ) {
-
     if (
         !isValidNumber(value)
     ) {
-
         return "";
     }
 
-
     const number =
         Number(value);
-
 
     if (number > 0) {
         return "positive";
     }
 
-
     if (number < 0) {
         return "negative";
     }
 
-
     return "neutral";
 }
-
-
-// ============================================================
-// REGIME CLASS
-// ============================================================
 
 function getRegimeClass(
     value
 ) {
-
     const text =
-        String(
-            value || ""
-        ).toLowerCase();
-
+        String(value || "")
+            .toLowerCase();
 
     if (
-        text.includes(
-            "bullish"
-        )
+        text.includes("bullish")
     ) {
-
         return "regime-bullish";
     }
 
-
     if (
-        text.includes(
-            "bearish"
-        )
+        text.includes("bearish")
     ) {
-
         return "regime-bearish";
     }
-
 
     if (
         text.includes("weak") ||
         text.includes("cautious")
     ) {
-
         return "regime-caution";
     }
-
 
     return "regime-neutral";
 }
 
-
-// ============================================================
-// ENVIRONMENT CLASS
-// ============================================================
-
 function getEnvironmentClass(
     value
 ) {
-
     const text =
-        String(
-            value || ""
-        ).toLowerCase();
-
+        String(value || "")
+            .toLowerCase();
 
     if (
-        text.includes(
-            "favorable"
-        ) ||
-        text.includes(
-            "positive"
-        ) ||
-        text.includes(
-            "bullish"
-        )
+        text.includes("favorable") ||
+        text.includes("positive") ||
+        text.includes("bullish") ||
+        text.includes("selective")
     ) {
-
         return "positive";
     }
-
 
     if (
         text.includes("avoid") ||
         text.includes("weak") ||
-        text.includes("bearish")
+        text.includes("bearish") ||
+        text.includes("high risk")
     ) {
-
         return "negative";
     }
-
 
     return "neutral";
 }
 
-
-// ============================================================
-// SECTOR CLASS
-// ============================================================
-
 function getSectorClass(
     value
 ) {
-
     const text =
-        String(
-            value || ""
-        ).toLowerCase();
-
+        String(value || "")
+            .toLowerCase();
 
     if (
-        text.includes(
-            "leading"
-        ) ||
-        text.includes(
-            "strong"
-        )
+        text.includes("leading") ||
+        text.includes("strong")
     ) {
-
         return "badge-positive";
     }
 
-
     if (
-        text.includes(
-            "lagging"
-        ) ||
-        text.includes(
-            "weak"
-        )
+        text.includes("lagging") ||
+        text.includes("weak")
     ) {
-
         return "badge-negative";
     }
-
 
     return "badge-neutral";
 }
 
-
-// ============================================================
-// STATUS BADGE
-// ============================================================
-
 function statusBadge(
     value
 ) {
-
     if (!value) {
         return "—";
     }
 
-
     return `
-
-        <span class="status-badge ${getStatusClass(value)}">
-
+        <span class="status-badge ${getStatusClass(
+            value
+        )}">
             ${escapeHtml(value)}
-
         </span>
-
     `;
 }
-
-
-// ============================================================
-// SETUP BADGE
-// ============================================================
 
 function setupBadge(
     value
 ) {
-
     if (!value) {
         return "—";
     }
 
-
     return `
-
-        <span class="setup-badge ${getSetupClass(value)}">
-
+        <span class="setup-badge ${getSetupClass(
+            value
+        )}">
             ${escapeHtml(value)}
-
         </span>
-
     `;
 }
-
-
-// ============================================================
-// STATUS CLASS
-// ============================================================
 
 function getStatusClass(
     value
 ) {
-
     const text =
         String(value)
             .toLowerCase();
-
 
     if (
         text.includes(
@@ -3198,12 +2991,13 @@ function getStatusClass(
         ) ||
         text.includes(
             "uptrend"
+        ) ||
+        text.includes(
+            "bullish"
         )
     ) {
-
         return "badge-positive";
     }
-
 
     if (
         text.includes(
@@ -3217,43 +3011,30 @@ function getStatusClass(
         ) ||
         text.includes(
             "downtrend"
+        ) ||
+        text.includes(
+            "bearish"
         )
     ) {
-
         return "badge-negative";
     }
-
 
     return "badge-neutral";
 }
 
-
-// ============================================================
-// SETUP CLASS
-// ============================================================
-
 function getSetupClass(
     value
 ) {
-
     const text =
-        String(
-            value || ""
-        ).toLowerCase();
-
+        String(value || "")
+            .toLowerCase();
 
     if (
-        text.includes(
-            "strong"
-        ) ||
-        text.includes(
-            "confirmed"
-        )
+        text.includes("strong") ||
+        text.includes("confirmed")
     ) {
-
         return "setup-positive";
     }
-
 
     if (
         text.includes(
@@ -3262,43 +3043,30 @@ function getSetupClass(
         text.includes(
             "pre-breakout"
         ) ||
-        text.includes(
-            "52w"
-        ) ||
-        text.includes(
-            "dma"
-        )
+        text.includes("52w") ||
+        text.includes("dma") ||
+        text.includes("momentum")
     ) {
-
         return "setup-watch";
     }
 
-
     if (
-        text.includes(
-            "weak"
-        ) ||
-        text.includes(
-            "avoid"
-        )
+        text.includes("weak") ||
+        text.includes("avoid")
     ) {
-
         return "setup-negative";
     }
-
 
     return "setup-neutral";
 }
 
-
 // ============================================================
-// SECURITY / HTML HELPERS
+// SECURITY
 // ============================================================
 
 function escapeHtml(
     value
 ) {
-
     return String(
         value ?? ""
     )
@@ -3324,11 +3092,9 @@ function escapeHtml(
         );
 }
 
-
 function escapeJs(
     value
 ) {
-
     return String(
         value ?? ""
     )
@@ -3342,9 +3108,8 @@ function escapeJs(
         );
 }
 
-
 // ============================================================
-// GLOBAL MODAL FUNCTIONS
+// GLOBALS
 // ============================================================
 
 window.openStockDetail =
@@ -3353,6 +3118,8 @@ window.openStockDetail =
 window.closeStockModal =
     closeStockModal;
 
+window.normalizeDashboardData =
+    normalizeDashboardData;
 
 // ============================================================
 // END
