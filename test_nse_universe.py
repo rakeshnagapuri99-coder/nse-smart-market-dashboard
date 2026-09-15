@@ -1,7 +1,8 @@
 import pandas as pd
 
 from engines.nse_universe import (
-    get_nse_universe
+    get_nse_universe,
+    save_universe
 )
 
 
@@ -46,6 +47,14 @@ def main():
         )
 
         return
+
+    # --------------------------------------------------------
+    # Save NSE Universe
+    # --------------------------------------------------------
+
+    save_universe(
+        universe
+    )
 
     # --------------------------------------------------------
     # Basic information
