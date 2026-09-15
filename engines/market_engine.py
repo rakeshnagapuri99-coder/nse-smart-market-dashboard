@@ -1,13 +1,16 @@
-import yfinance as yf
 import pandas as pd
 import numpy as np
+import yfinance as yf
+from pathlib import Path
 
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# MARKET INTELLIGENCE ENGINE
+# MARKET REGIME ENGINE — V2
 # ============================================================
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = BASE_DIR / "output"
 
 INDEXES = {
     "NIFTY 50": "^NSEI",
@@ -20,13 +23,9 @@ INDEXES = {
 # DOWNLOAD DATA
 # ============================================================
 
-def download_data(
-    symbol,
-    period="2y"
-):
+def download_data(symbol, period="2y"):
 
     try:
-
         data = yf.download(
             symbol,
             period=period,
@@ -35,300 +34,229 @@ def download_data(
             progress=False
         )
 
-        if data is None or data.empty:
-
+        if data.empty:
             return pd.DataFrame()
 
-        if isinstance(
-            data.columns,
-            pd.MultiIndex
-        ):
-
-            data.columns = (
-                data.columns
-                .get_level_values(0)
-            )
-
-        data = data.dropna()
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
 
         return data
 
     except Exception as e:
 
-        print(
-            f"Error downloading {symbol}: {e}"
-        )
+        print(f"Unable to download {symbol}: {e}")
 
         return pd.DataFrame()
 
 
 # ============================================================
-# INDICATORS
+# TECHNICAL INDICATORS
 # ============================================================
 
 def calculate_indicators(data):
 
     if data.empty:
-
         return data
+
+    data = data.copy()
 
     close = data["Close"]
 
-    data["SMA20"] = (
-        close.rolling(20).mean()
-    )
+    data["SMA20"] = close.rolling(20).mean()
+    data["SMA50"] = close.rolling(50).mean()
+    data["SMA100"] = close.rolling(100).mean()
+    data["SMA200"] = close.rolling(200).mean()
 
-    data["SMA50"] = (
-        close.rolling(50).mean()
-    )
+    data["EMA20"] = close.ewm(
+        span=20,
+        adjust=False
+    ).mean()
 
-    data["SMA100"] = (
-        close.rolling(100).mean()
-    )
-
-    data["SMA200"] = (
-        close.rolling(200).mean()
-    )
-
-    data["EMA20"] = (
-        close.ewm(
-            span=20,
-            adjust=False
-        ).mean()
-    )
-
-    data["EMA50"] = (
-        close.ewm(
-            span=50,
-            adjust=False
-        ).mean()
-    )
-
-    # --------------------------------------------------------
-    # RSI 14
-    # --------------------------------------------------------
+    data["EMA50"] = close.ewm(
+        span=50,
+        adjust=False
+    ).mean()
 
     delta = close.diff()
 
-    gain = delta.clip(
-        lower=0
-    )
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-    loss = -delta.clip(
-        upper=0
-    )
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
 
-    avg_gain = (
-        gain.rolling(14).mean()
-    )
+    rs = avg_gain / avg_loss.replace(0, np.nan)
 
-    avg_loss = (
-        loss.rolling(14).mean()
-    )
-
-    rs = (
-        avg_gain
-        / avg_loss.replace(
-            0,
-            np.nan
-        )
-    )
-
-    data["RSI14"] = (
-        100
-        - (
-            100
-            / (1 + rs)
-        )
+    data["RSI14"] = 100 - (
+        100 / (1 + rs)
     )
 
     return data
 
 
 # ============================================================
-# LATEST VALUES
+# TREND
 # ============================================================
 
-def get_latest_values(data):
+def determine_trend(row):
+
+    price = row["Close"]
+
+    sma20 = row["SMA20"]
+    sma50 = row["SMA50"]
+    sma200 = row["SMA200"]
+
+    if pd.isna(sma200):
+        return "Insufficient Data"
+
+    if (
+        price > sma20
+        and sma20 > sma50
+        and sma50 > sma200
+    ):
+        return "Strong Bullish"
+
+    if (
+        price > sma50
+        and sma50 > sma200
+    ):
+        return "Bullish"
+
+    if (
+        price < sma20
+        and sma20 < sma50
+        and sma50 < sma200
+    ):
+        return "Strong Bearish"
+
+    if price < sma200:
+        return "Bearish"
+
+    return "Neutral"
+
+
+# ============================================================
+# MOMENTUM
+# ============================================================
+
+def determine_momentum(row):
+
+    rsi = row["RSI14"]
+    price = row["Close"]
+
+    ema20 = row["EMA20"]
+    ema50 = row["EMA50"]
+
+    if pd.isna(rsi):
+        return "Insufficient Data"
+
+    if (
+        rsi >= 60
+        and price > ema20
+        and ema20 > ema50
+    ):
+        return "Strong Positive"
+
+    if (
+        rsi >= 50
+        and price > ema20
+    ):
+        return "Positive"
+
+    if (
+        rsi < 40
+        and price < ema20
+        and ema20 < ema50
+    ):
+        return "Strong Negative"
+
+    if rsi < 50:
+        return "Weak"
+
+    return "Neutral"
+
+
+# ============================================================
+# TREND SCORE
+# ============================================================
+
+def trend_score(trend):
+
+    scores = {
+        "Strong Bullish": 100,
+        "Bullish": 80,
+        "Neutral": 50,
+        "Bearish": 25,
+        "Strong Bearish": 0
+    }
+
+    return scores.get(trend, 50)
+
+
+# ============================================================
+# MOMENTUM SCORE
+# ============================================================
+
+def momentum_score(momentum):
+
+    scores = {
+        "Strong Positive": 100,
+        "Positive": 75,
+        "Neutral": 50,
+        "Weak": 25,
+        "Strong Negative": 0
+    }
+
+    return scores.get(momentum, 50)
+
+
+# ============================================================
+# INDEX ANALYSIS
+# ============================================================
+
+def analyze_index(name, symbol):
+
+    data = download_data(symbol)
 
     if data.empty:
+        return {
+            "name": name,
+            "symbol": symbol,
+            "price": np.nan,
+            "trend": "Unavailable",
+            "momentum": "Unavailable",
+            "rsi": np.nan,
+            "score": 50
+        }
 
-        return {}
+    data = calculate_indicators(data)
 
     latest = data.iloc[-1]
 
-    return {
+    trend = determine_trend(latest)
 
-        "price": float(
-            latest["Close"]
-        ),
+    momentum = determine_momentum(latest)
 
-        "sma20": float(
-            latest["SMA20"]
-        ),
+    t_score = trend_score(trend)
 
-        "sma50": float(
-            latest["SMA50"]
-        ),
-
-        "sma100": float(
-            latest["SMA100"]
-        ),
-
-        "sma200": float(
-            latest["SMA200"]
-        ),
-
-        "ema20": float(
-            latest["EMA20"]
-        ),
-
-        "ema50": float(
-            latest["EMA50"]
-        ),
-
-        "rsi14": float(
-            latest["RSI14"]
-        )
-    }
-
-
-# ============================================================
-# INDEX TREND
-# ============================================================
-
-def determine_trend(values):
-
-    price = values["price"]
-
-    sma20 = values["sma20"]
-
-    sma50 = values["sma50"]
-
-    sma200 = values["sma200"]
-
-    score = 0
-
-    if price > sma20:
-        score += 1
-
-    if price > sma50:
-        score += 1
-
-    if price > sma200:
-        score += 2
-
-    if sma20 > sma50:
-        score += 1
-
-    if sma50 > sma200:
-        score += 2
-
-    if score >= 6:
-
-        return "Strong Bullish", score
-
-    elif score >= 4:
-
-        return "Bullish", score
-
-    elif score >= 2:
-
-        return "Neutral / Weak", score
-
-    else:
-
-        return "Bearish", score
-
-
-# ============================================================
-# INDEX MOMENTUM
-# ============================================================
-
-def determine_momentum(values):
-
-    price = values["price"]
-
-    ema20 = values["ema20"]
-
-    ema50 = values["ema50"]
-
-    rsi = values["rsi14"]
-
-    score = 0
-
-    if price > ema20:
-        score += 1
-
-    if price > ema50:
-        score += 1
-
-    if ema20 > ema50:
-        score += 1
-
-    if 50 <= rsi <= 70:
-        score += 2
-
-    elif rsi > 70:
-        score += 1
-
-    elif rsi < 40:
-        score -= 2
-
-    elif rsi < 50:
-        score -= 1
-
-    if score >= 4:
-
-        return "Strong Positive", score
-
-    elif score >= 2:
-
-        return "Positive", score
-
-    elif score >= 0:
-
-        return "Neutral", score
-
-    else:
-
-        return "Weak", score
-
-
-# ============================================================
-# INDEX SCORE
-# ============================================================
-
-def calculate_index_score(
-    trend_score,
-    momentum_score
-):
-
-    # Trend = 60%
-    trend_component = (
-        trend_score / 7
-    ) * 60
-
-    # Momentum = 40%
-    momentum_component = (
-        (momentum_score + 2) / 7
-    ) * 40
+    m_score = momentum_score(momentum)
 
     score = (
-        trend_component
-        + momentum_component
+        t_score * 0.60
+        + m_score * 0.40
     )
 
-    return round(
-        max(
-            0,
-            min(
-                100,
-                score
-            )
-        ),
-        2
-    )
+    return {
+        "name": name,
+        "symbol": symbol,
+        "price": float(latest["Close"]),
+        "trend": trend,
+        "momentum": momentum,
+        "rsi": round(float(latest["RSI14"]), 2)
+        if not pd.isna(latest["RSI14"])
+        else np.nan,
+        "score": round(score, 2)
+    }
 
 
 # ============================================================
@@ -338,28 +266,21 @@ def calculate_index_score(
 def interpret_vix(vix):
 
     if pd.isna(vix):
-
         return "Unavailable"
 
     if vix < 12:
+        return "Very Low"
 
-        return "Very Low Volatility"
+    if vix < 15:
+        return "Low"
 
-    elif vix < 15:
+    if vix < 20:
+        return "Normal"
 
-        return "Low Volatility"
+    if vix < 25:
+        return "High"
 
-    elif vix < 20:
-
-        return "Normal Volatility"
-
-    elif vix < 25:
-
-        return "High Volatility"
-
-    else:
-
-        return "Very High Volatility"
+    return "Very High"
 
 
 # ============================================================
@@ -374,66 +295,56 @@ def determine_market_regime(
 ):
 
     # --------------------------------------------------------
-    # Combined components
-    #
-    # Nifty      = 40%
-    # Bank Nifty = 20%
-    # Breadth    = 40%
+    # Core market score
     # --------------------------------------------------------
 
-    combined_score = (
+    base_score = (
         nifty_score * 0.40
-        +
-        bank_score * 0.20
-        +
-        breadth_score * 0.40
+        + bank_score * 0.20
+        + breadth_score * 0.40
     )
 
     # --------------------------------------------------------
-    # VIX adjustment
-    #
-    # High volatility reduces confidence.
-    # Low volatility does not artificially increase score.
+    # VIX risk adjustment
     # --------------------------------------------------------
+
+    vix_adjustment = 0
 
     if not pd.isna(vix):
 
         if vix >= 25:
-
-            combined_score -= 8
+            vix_adjustment = -10
 
         elif vix >= 20:
+            vix_adjustment = -5
 
-            combined_score -= 4
+        elif vix < 12:
+            vix_adjustment = 2
 
-    combined_score = round(
-        max(
-            0,
-            min(
-                100,
-                combined_score
-            )
-        ),
+    market_score = base_score + vix_adjustment
+
+    market_score = round(
+        max(0, min(100, market_score)),
         2
     )
 
     # --------------------------------------------------------
-    # Regime
+    # Market regime
     # --------------------------------------------------------
 
-    if combined_score >= 70:
+    if market_score >= 70:
 
         regime = "Bullish"
 
-    elif combined_score >= 58:
+    elif market_score >= 58:
 
         regime = "Bullish but Cautious"
 
-    elif combined_score >= 45:
+    elif market_score >= 45:
 
         regime = "Sideways"
 
-    elif combined_score >= 30:
+    elif market_score >= 30:
 
         regime = "Weak"
 
@@ -441,148 +352,114 @@ def determine_market_regime(
 
         regime = "Bearish"
 
-    return (
-        regime,
-        combined_score
-    )
+    return regime, market_score
 
 
 # ============================================================
-# MAIN MARKET ENGINE
+# TRADING ENVIRONMENT
 # ============================================================
 
-def get_market_regime(
-    breadth=None
+def determine_trading_environment(
+    regime,
+    breadth_score,
+    vix
 ):
 
-    results = {}
+    if regime == "Bullish":
+
+        return {
+            "equity": "Favorable",
+            "swing": "Favorable",
+            "breakout": "Favorable",
+            "intraday": "Favorable",
+            "options": "Selective"
+        }
+
+    if regime == "Bullish but Cautious":
+
+        return {
+            "equity": "Selective",
+            "swing": "Selective",
+            "breakout": "Selective",
+            "intraday": "Selective",
+            "options": "Selective"
+        }
+
+    if regime == "Sideways":
+
+        return {
+            "equity": "Selective",
+            "swing": "Selective",
+            "breakout": "Confirmation Required",
+            "intraday": "Selective",
+            "options": "Risky"
+        }
+
+    if regime == "Weak":
+
+        return {
+            "equity": "Cautious",
+            "swing": "Cautious",
+            "breakout": "Avoid Weak Breakouts",
+            "intraday": "Selective",
+            "options": "High Risk"
+        }
+
+    return {
+        "equity": "Defensive",
+        "swing": "Avoid",
+        "breakout": "Avoid",
+        "intraday": "Selective",
+        "options": "Very High Risk"
+    }
+
+
+# ============================================================
+# MAIN MARKET REGIME FUNCTION
+# ============================================================
+
+def get_market_regime(breadth=None):
+
+    print()
+    print("=" * 60)
+    print("MARKET REGIME ANALYSIS")
+    print("=" * 60)
 
     # --------------------------------------------------------
-    # NIFTY 50
+    # NIFTY
     # --------------------------------------------------------
 
-    nifty = download_data(
+    nifty = analyze_index(
+        "NIFTY 50",
         INDEXES["NIFTY 50"]
     )
-
-    if not nifty.empty:
-
-        nifty = calculate_indicators(
-            nifty
-        )
-
-        values = get_latest_values(
-            nifty
-        )
-
-        trend, trend_score = (
-            determine_trend(
-                values
-            )
-        )
-
-        momentum, momentum_score = (
-            determine_momentum(
-                values
-            )
-        )
-
-        score = calculate_index_score(
-            trend_score,
-            momentum_score
-        )
-
-        results["NIFTY 50"] = {
-
-            **values,
-
-            "trend": trend,
-
-            "trend_score": trend_score,
-
-            "momentum": momentum,
-
-            "momentum_score": momentum_score,
-
-            "market_score": score
-        }
 
     # --------------------------------------------------------
     # BANK NIFTY
     # --------------------------------------------------------
 
-    banknifty = download_data(
+    bank = analyze_index(
+        "BANK NIFTY",
         INDEXES["BANK NIFTY"]
     )
-
-    if not banknifty.empty:
-
-        banknifty = calculate_indicators(
-            banknifty
-        )
-
-        values = get_latest_values(
-            banknifty
-        )
-
-        trend, trend_score = (
-            determine_trend(
-                values
-            )
-        )
-
-        momentum, momentum_score = (
-            determine_momentum(
-                values
-            )
-        )
-
-        score = calculate_index_score(
-            trend_score,
-            momentum_score
-        )
-
-        results["BANK NIFTY"] = {
-
-            **values,
-
-            "trend": trend,
-
-            "trend_score": trend_score,
-
-            "momentum": momentum,
-
-            "momentum_score": momentum_score,
-
-            "market_score": score
-        }
 
     # --------------------------------------------------------
     # INDIA VIX
     # --------------------------------------------------------
 
-    vix = download_data(
-        INDEXES["INDIA VIX"],
-        period="1y"
+    vix_data = download_data(
+        INDEXES["INDIA VIX"]
     )
 
-    vix_value = np.nan
+    if vix_data.empty:
 
-    if not vix.empty:
+        vix = np.nan
 
-        vix_value = float(
-            vix["Close"].iloc[-1]
-        )
+    else:
 
-        results["INDIA VIX"] = {
+        vix = float(vix_data["Close"].iloc[-1])
 
-            "value": vix_value,
-
-            "interpretation":
-                interpret_vix(
-                    vix_value
-                )
-        }
+    vix_interpretation = interpret_vix(vix)
 
     # --------------------------------------------------------
     # BREADTH
@@ -597,123 +474,168 @@ def get_market_regime(
             )
         )
 
-        results["MARKET BREADTH"] = {
-
-            "stocks_analyzed":
-                breadth.get(
-                    "stocks_analyzed",
-                    0
-                ),
-
-            "pct_above_20dma":
-                breadth.get(
-                    "pct_above_20dma",
-                    0
-                ),
-
-            "pct_above_50dma":
-                breadth.get(
-                    "pct_above_50dma",
-                    0
-                ),
-
-            "pct_above_200dma":
-                breadth.get(
-                    "pct_above_200dma",
-                    0
-                ),
-
-            "52w_highs":
-                breadth.get(
-                    "52w_highs",
-                    0
-                ),
-
-            "52w_lows":
-                breadth.get(
-                    "52w_lows",
-                    0
-                ),
-
-            "high_low_ratio":
-                breadth.get(
-                    "high_low_ratio",
-                    0
-                ),
-
-            "breadth_score":
-                breadth_score,
-
-            "breadth_regime":
-                breadth.get(
-                    "breadth_regime",
-                    "Unknown"
-                )
-        }
-
     else:
 
         breadth_score = 50
 
     # --------------------------------------------------------
-    # INDEX SCORES
+    # COMBINED MARKET REGIME
     # --------------------------------------------------------
 
-    nifty_score = results.get(
-        "NIFTY 50",
-        {}
-    ).get(
-        "market_score",
-        50
-    )
-
-    bank_score = results.get(
-        "BANK NIFTY",
-        {}
-    ).get(
-        "market_score",
-        50
+    regime, market_score = determine_market_regime(
+        nifty["score"],
+        bank["score"],
+        breadth_score,
+        vix
     )
 
     # --------------------------------------------------------
-    # OVERALL MARKET
+    # TRADING ENVIRONMENT
     # --------------------------------------------------------
 
-    regime, overall_score = (
-        determine_market_regime(
-            nifty_score,
-            bank_score,
-            breadth_score,
-            vix_value
-        )
+    trading_environment = determine_trading_environment(
+        regime,
+        breadth_score,
+        vix
     )
 
-    results["MARKET"] = {
+    # --------------------------------------------------------
+    # RESULT
+    # --------------------------------------------------------
 
-        "regime": regime,
+    result = {
 
-        "market_score":
-            overall_score,
+        "market_regime": regime,
 
-        "nifty_score":
-            nifty_score,
+        "market_score": market_score,
 
-        "bank_nifty_score":
-            bank_score,
+        "nifty_score": nifty["score"],
 
-        "breadth_score":
-            breadth_score,
+        "bank_nifty_score": bank["score"],
 
-        "vix":
-            vix_value,
+        "breadth_score": breadth_score,
 
-        "vix_interpretation":
-            interpret_vix(
-                vix_value
-            )
+        "vix": round(vix, 2)
+        if not pd.isna(vix)
+        else np.nan,
+
+        "vix_interpretation": vix_interpretation,
+
+        "nifty_price": nifty["price"],
+
+        "nifty_trend": nifty["trend"],
+
+        "nifty_momentum": nifty["momentum"],
+
+        "nifty_rsi": nifty["rsi"],
+
+        "bank_nifty_price": bank["price"],
+
+        "bank_nifty_trend": bank["trend"],
+
+        "bank_nifty_momentum": bank["momentum"],
+
+        "bank_nifty_rsi": bank["rsi"],
+
+        "equity_environment":
+            trading_environment["equity"],
+
+        "swing_environment":
+            trading_environment["swing"],
+
+        "breakout_environment":
+            trading_environment["breakout"],
+
+        "intraday_environment":
+            trading_environment["intraday"],
+
+        "options_environment":
+            trading_environment["options"]
     }
 
-    return results
+    return result
+
+
+# ============================================================
+# DISPLAY
+# ============================================================
+
+def display_market(market):
+
+    if not market:
+        return
+
+    print()
+    print("=" * 60)
+    print("MARKET REGIME SUMMARY")
+    print("=" * 60)
+    print()
+
+    print(
+        f"Market Regime        : "
+        f"{market['market_regime']}"
+    )
+
+    print(
+        f"Market Score         : "
+        f"{market['market_score']}"
+    )
+
+    print(
+        f"Nifty Score          : "
+        f"{market['nifty_score']}"
+    )
+
+    print(
+        f"Bank Nifty Score     : "
+        f"{market['bank_nifty_score']}"
+    )
+
+    print(
+        f"Breadth Score        : "
+        f"{market['breadth_score']}"
+    )
+
+    print(
+        f"India VIX            : "
+        f"{market['vix']}"
+    )
+
+    print(
+        f"VIX Interpretation   : "
+        f"{market['vix_interpretation']}"
+    )
+
+    print()
+
+    print(
+        f"Equity Environment   : "
+        f"{market['equity_environment']}"
+    )
+
+    print(
+        f"Swing Environment     : "
+        f"{market['swing_environment']}"
+    )
+
+    print(
+        f"Breakout Environment : "
+        f"{market['breakout_environment']}"
+    )
+
+    print(
+        f"Intraday Environment  : "
+        f"{market['intraday_environment']}"
+    )
+
+    print(
+        f"Options Environment   : "
+        f"{market['options_environment']}"
+    )
+
+    print()
+
+    print("=" * 60)
 
 
 # ============================================================
@@ -724,29 +646,4 @@ if __name__ == "__main__":
 
     market = get_market_regime()
 
-    print()
-    print("=" * 60)
-
-    print(
-        "NSE SMART MARKET DASHBOARD"
-    )
-
-    print(
-        "MARKET INTELLIGENCE ENGINE"
-    )
-
-    print("=" * 60)
-
-    for name, data in market.items():
-
-        print()
-        print(name)
-
-        for key, value in data.items():
-
-            print(
-                f"{key}: {value}"
-            )
-
-    print()
-    print("=" * 60)
+    display_market(market)
