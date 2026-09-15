@@ -1,31 +1,22 @@
-/* ============================================================
-   NSE SMART MARKET DASHBOARD
-   DASHBOARD ENGINE — V1
-============================================================ */
+// ============================================================
+// NSE SMART MARKET DASHBOARD
+// DASHBOARD ENGINE — PRODUCTION V2
+// ============================================================
 
+const DATA_FILE = "output/dashboard_data.json";
 
-/* ============================================================
-   CONFIGURATION
-============================================================ */
-
-const DATA_PATH = "output/";
-
-
+let dashboardData = null;
 let currentWatchlist = "next_day";
 
 
-let stockData = [];
+// ============================================================
+// HELPERS
+// ============================================================
 
-let marketData = {};
+function byId(id) {
+    return document.getElementById(id);
+}
 
-let breadthData = {};
-
-let sectorData = [];
-
-
-/* ============================================================
-   HELPERS
-============================================================ */
 
 function formatNumber(value, decimals = 2) {
 
@@ -35,7 +26,7 @@ function formatNumber(value, decimals = 2) {
         value === "" ||
         Number.isNaN(Number(value))
     ) {
-        return "--";
+        return "—";
     }
 
     return Number(value).toLocaleString(
@@ -53,9 +44,9 @@ function formatPrice(value) {
     if (
         value === null ||
         value === undefined ||
-        value === ""
+        Number.isNaN(Number(value))
     ) {
-        return "--";
+        return "—";
     }
 
     return "₹" + formatNumber(value, 2);
@@ -67,9 +58,9 @@ function formatPercent(value) {
     if (
         value === null ||
         value === undefined ||
-        value === ""
+        Number.isNaN(Number(value))
     ) {
-        return "--";
+        return "—";
     }
 
     const number = Number(value);
@@ -77,12 +68,26 @@ function formatPercent(value) {
     return (
         number >= 0 ? "+" : ""
     )
-    + number.toFixed(2)
+    + formatNumber(number, 2)
     + "%";
 }
 
 
-function escapeHTML(value) {
+function formatRatio(value) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        Number.isNaN(Number(value))
+    ) {
+        return "—";
+    }
+
+    return formatNumber(value, 2);
+}
+
+
+function escapeHtml(value) {
 
     if (
         value === null ||
@@ -92,1265 +97,1020 @@ function escapeHTML(value) {
     }
 
     return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 
-/* ============================================================
-   BADGE
-============================================================ */
-
-function badgeClass(value) {
-
-    const text = String(
-        value || ""
-    ).toLowerCase();
-
+function ratingClass(score) {
 
     if (
-        text.includes("strong")
-        || text.includes("leading")
-        || text.includes("positive")
-        || text.includes("confirmed")
-        || text.includes("bullish")
-        || text.includes("favorable")
+        score === null ||
+        score === undefined ||
+        Number.isNaN(Number(score))
     ) {
-
-        return "badge-green";
+        return "";
     }
 
+    const value = Number(score);
 
-    if (
-        text.includes("bearish")
-        || text.includes("negative")
-        || text.includes("downtrend")
-        || text.includes("lagging")
-        || text.includes("avoid")
-    ) {
-
-        return "badge-red";
+    if (value >= 75) {
+        return "rating-excellent";
     }
 
-
-    if (
-        text.includes("cautious")
-        || text.includes("required")
-        || text.includes("selective")
-        || text.includes("weak")
-    ) {
-
-        return "badge-orange";
+    if (value >= 60) {
+        return "rating-good";
     }
 
+    if (value >= 45) {
+        return "rating-neutral";
+    }
+
+    if (value >= 30) {
+        return "rating-weak";
+    }
+
+    return "rating-poor";
+}
+
+
+function statusClass(value) {
+
+    if (!value) {
+        return "";
+    }
+
+    const text = String(value).toLowerCase();
 
     if (
+        text.includes("strong") ||
+        text.includes("bullish") ||
+        text.includes("positive") ||
+        text.includes("leading") ||
+        text.includes("confirmed")
+    ) {
+        return "status-positive";
+    }
+
+    if (
+        text.includes("weak") ||
+        text.includes("bearish") ||
+        text.includes("negative") ||
+        text.includes("lagging") ||
+        text.includes("avoid")
+    ) {
+        return "status-negative";
+    }
+
+    if (
+        text.includes("required") ||
+        text.includes("caution") ||
+        text.includes("selective") ||
         text.includes("neutral")
-        || text.includes("sideways")
     ) {
-
-        return "badge-yellow";
+        return "status-warning";
     }
 
-
-    return "badge-blue";
+    return "status-neutral";
 }
 
 
-function createBadge(value) {
+function safeText(value) {
 
-    return `
-        <span class="badge ${badgeClass(value)}">
-            ${escapeHTML(value || "--")}
-        </span>
-    `;
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "—";
+    }
+
+    return escapeHtml(value);
 }
 
 
-/* ============================================================
-   LOAD CSV
-============================================================ */
+// ============================================================
+// LOAD DASHBOARD DATA
+// ============================================================
 
-async function loadCSV(fileName) {
+async function loadDashboard() {
 
     try {
 
         const response = await fetch(
-            DATA_PATH + fileName
+            DATA_FILE + "?v=" + Date.now()
         );
 
         if (!response.ok) {
-
-            return [];
+            throw new Error(
+                "Unable to load dashboard data."
+            );
         }
 
-        const text = await response.text();
+        dashboardData =
+            await response.json();
 
-        return parseCSV(text);
+        renderDashboard();
 
     } catch (error) {
 
-        console.error(
-            "Unable to load",
-            fileName,
-            error
-        );
+        console.error(error);
 
-        return [];
+        showDashboardError(
+            "Dashboard data is currently unavailable. " +
+            "Please try again after the daily market update."
+        );
     }
 }
 
 
-/* ============================================================
-   CSV PARSER
-============================================================ */
+// ============================================================
+// ERROR
+// ============================================================
 
-function parseCSV(text) {
+function showDashboardError(message) {
 
-    const lines = text
-        .trim()
-        .split(/\r?\n/);
+    const containers = [
+        "marketRegime",
+        "breadthCards",
+        "sectorTable",
+        "stockTable"
+    ];
 
-    if (lines.length < 2) {
+    containers.forEach(id => {
 
-        return [];
+        const element = byId(id);
+
+        if (element) {
+
+            element.innerHTML =
+                `<div class="dashboard-error">
+                    ${escapeHtml(message)}
+                </div>`;
+        }
+    });
+}
+
+
+// ============================================================
+// MAIN RENDER
+// ============================================================
+
+function renderDashboard() {
+
+    if (!dashboardData) {
+        return;
     }
 
+    renderMarket();
+    renderBreadth();
+    renderSectors();
 
-    const headers = parseCSVLine(
-        lines[0]
+    renderWatchlist(
+        currentWatchlist
     );
 
+    setupTabs();
 
-    return lines
-        .slice(1)
-        .filter(line => line.trim() !== "")
-        .map(line => {
-
-            const values =
-                parseCSVLine(line);
-
-            const row = {};
-
-            headers.forEach(
-                (header, index) => {
-
-                    row[header] =
-                        values[index] ?? "";
-                }
-            );
-
-            return row;
-        });
+    updateGeneratedTime();
 }
 
 
-function parseCSVLine(line) {
+// ============================================================
+// MARKET
+// ============================================================
 
-    const result = [];
+function renderMarket() {
 
-    let current = "";
+    const market =
+        dashboardData.market || {};
 
-    let insideQuotes = false;
+    const regime =
+        market.market_regime || "Unavailable";
+
+    const score =
+        market.market_score;
+
+    const html = `
+
+        <div class="market-card regime-card">
+
+            <div class="card-label">
+                MARKET REGIME
+            </div>
+
+            <div class="market-main-value">
+                ${safeText(regime)}
+            </div>
+
+            <div class="score-line">
+                Market Score:
+                <strong>
+                    ${formatNumber(score)}
+                </strong>
+            </div>
+
+        </div>
 
 
-    for (
-        let i = 0;
-        i < line.length;
-        i++
-    ) {
+        <div class="market-card">
 
-        const char = line[i];
+            <div class="card-label">
+                NIFTY 50
+            </div>
 
-        const next = line[i + 1];
+            <div class="market-main-value">
+                ${formatPrice(
+                    market.nifty_price
+                )}
+            </div>
+
+            <div class="status-badge
+                ${statusClass(
+                    market.nifty_trend
+                )}">
+                ${safeText(
+                    market.nifty_trend
+                )}
+            </div>
+
+        </div>
 
 
-        if (
-            char === '"'
-            && insideQuotes
-            && next === '"'
-        ) {
+        <div class="market-card">
 
-            current += '"';
+            <div class="card-label">
+                BANK NIFTY
+            </div>
 
-            i++;
+            <div class="market-main-value">
+                ${formatPrice(
+                    market.bank_nifty_price
+                )}
+            </div>
 
-            continue;
+            <div class="status-badge
+                ${statusClass(
+                    market.bank_nifty_trend
+                )}">
+                ${safeText(
+                    market.bank_nifty_trend
+                )}
+            </div>
+
+        </div>
+
+
+        <div class="market-card">
+
+            <div class="card-label">
+                INDIA VIX
+            </div>
+
+            <div class="market-main-value">
+                ${formatNumber(
+                    market.vix
+                )}
+            </div>
+
+            <div class="status-badge
+                ${statusClass(
+                    market.vix_interpretation
+                )}">
+                ${safeText(
+                    market.vix_interpretation
+                )}
+            </div>
+
+        </div>
+
+
+        <div class="market-card">
+
+            <div class="card-label">
+                BREADTH
+            </div>
+
+            <div class="market-main-value">
+                ${formatNumber(
+                    market.breadth_score
+                )}
+            </div>
+
+            <div class="status-badge
+                ${statusClass(
+                    market.breadth_score >= 50
+                        ? "Positive"
+                        : "Weak"
+                )}">
+                ${safeText(
+                    market.breadth_score >= 50
+                        ? "Positive"
+                        : "Weak"
+                )}
+            </div>
+
+        </div>
+
+    `;
+
+    const container =
+        byId("marketRegime");
+
+    if (container) {
+        container.innerHTML = html;
+    }
+}
+
+
+// ============================================================
+// BREADTH
+// ============================================================
+
+function renderBreadth() {
+
+    const breadth =
+        dashboardData.breadth || {};
+
+    const cards = [
+
+        {
+            label: "Above 20 DMA",
+            value:
+                breadth.pct_above_20dma,
+            suffix: "%",
+            count:
+                breadth.above_20dma
+        },
+
+        {
+            label: "Above 50 DMA",
+            value:
+                breadth.pct_above_50dma,
+            suffix: "%",
+            count:
+                breadth.above_50dma
+        },
+
+        {
+            label: "Above 200 DMA",
+            value:
+                breadth.pct_above_200dma,
+            suffix: "%",
+            count:
+                breadth.above_200dma
+        },
+
+        {
+            label: "52W Highs",
+            value:
+                breadth["52w_highs"],
+            suffix: "",
+            count: null
+        },
+
+        {
+            label: "52W Lows",
+            value:
+                breadth["52w_lows"],
+            suffix: "",
+            count: null
+        },
+
+        {
+            label: "High / Low",
+            value:
+                breadth.high_low_ratio,
+            suffix: "x",
+            count: null
         }
 
-
-        if (char === '"') {
-
-            insideQuotes =
-                !insideQuotes;
-
-            continue;
-        }
+    ];
 
 
-        if (
-            char === ","
-            && !insideQuotes
-        ) {
+    const html =
+        cards.map(card => `
 
-            result.push(current);
+            <div class="breadth-card">
 
-            current = "";
+                <div class="card-label">
+                    ${escapeHtml(
+                        card.label
+                    )}
+                </div>
 
-            continue;
-        }
+                <div class="breadth-value">
+
+                    ${formatNumber(
+                        card.value
+                    )}${card.suffix}
+
+                </div>
+
+                ${
+                    card.count !== null
+                        ? `
+                            <div class="breadth-count">
+                                ${formatNumber(
+                                    card.count,
+                                    0
+                                )} stocks
+                            </div>
+                          `
+                        : ""
+                }
+
+            </div>
+
+        `).join("");
 
 
-        current += char;
+    const container =
+        byId("breadthCards");
+
+    if (container) {
+        container.innerHTML = html;
+    }
+}
+
+
+// ============================================================
+// SECTORS
+// ============================================================
+
+function renderSectors() {
+
+    const sectors =
+        dashboardData.sectors || [];
+
+    const container =
+        byId("sectorTable");
+
+    if (!container) {
+        return;
     }
 
+    if (!sectors.length) {
 
-    result.push(current);
+        container.innerHTML =
+            "<p>No sector data available.</p>";
 
-    return result;
-}
+        return;
+    }
 
-
-/* ============================================================
-   LOAD MARKET
-============================================================ */
-
-async function loadMarket() {
 
     const rows =
-        await loadCSV(
-            "market_regime_test.csv"
-        );
+        sectors.map(sector => `
 
-
-    if (!rows.length) {
-
-        return;
-    }
-
-
-    marketData = rows[0];
-
-
-    document.getElementById(
-        "marketRegime"
-    ).innerHTML =
-        createBadge(
-            marketData.market_regime
-        );
-
-
-    document.getElementById(
-        "marketScore"
-    ).textContent =
-        "Score: "
-        + formatNumber(
-            marketData.market_score
-        );
-
-
-    document.getElementById(
-        "niftyPrice"
-    ).textContent =
-        formatPrice(
-            marketData.nifty_price
-        );
-
-
-    document.getElementById(
-        "niftyTrend"
-    ).innerHTML =
-        createBadge(
-            marketData.nifty_trend
-        );
-
-
-    document.getElementById(
-        "bankPrice"
-    ).textContent =
-        formatPrice(
-            marketData.bank_nifty_price
-        );
-
-
-    document.getElementById(
-        "bankTrend"
-    ).innerHTML =
-        createBadge(
-            marketData.bank_nifty_trend
-        );
-
-
-    document.getElementById(
-        "vixValue"
-    ).textContent =
-        formatNumber(
-            marketData.vix
-        );
-
-
-    document.getElementById(
-        "vixStatus"
-    ).innerHTML =
-        createBadge(
-            marketData.vix_interpretation
-        );
-
-
-    document.getElementById(
-        "breadthScore"
-    ).textContent =
-        formatNumber(
-            marketData.breadth_score
-        );
-}
-
-
-/* ============================================================
-   LOAD BREADTH
-============================================================ */
-
-async function loadBreadth() {
-
-    const rows =
-        await loadCSV(
-            "market_breadth.csv"
-        );
-
-
-    if (!rows.length) {
-
-        return;
-    }
-
-
-    breadthData = rows[0];
-
-
-    document.getElementById(
-        "above20"
-    ).textContent =
-        formatNumber(
-            breadthData.pct_above_20dma
-        )
-        + "%";
-
-
-    document.getElementById(
-        "above50"
-    ).textContent =
-        formatNumber(
-            breadthData.pct_above_50dma
-        )
-        + "%";
-
-
-    document.getElementById(
-        "above200"
-    ).textContent =
-        formatNumber(
-            breadthData.pct_above_200dma
-        )
-        + "%";
-
-
-    document.getElementById(
-        "highs52"
-    ).textContent =
-        formatNumber(
-            breadthData["52w_highs"],
-        0);
-
-
-    document.getElementById(
-        "lows52"
-    ).textContent =
-        formatNumber(
-            breadthData["52w_lows"],
-        0);
-
-
-    document.getElementById(
-        "highLowRatio"
-    ).textContent =
-        formatNumber(
-            breadthData.high_low_ratio
-        );
-
-
-    document.getElementById(
-        "breadthStatus"
-    ).innerHTML =
-        createBadge(
-            breadthData.breadth_regime
-        );
-}
-
-
-/* ============================================================
-   LOAD SECTORS
-============================================================ */
-
-async function loadSectors() {
-
-    sectorData =
-        await loadCSV(
-            "sector_analysis.csv"
-        );
-
-
-    renderSectorTable();
-}
-
-
-function renderSectorTable() {
-
-    const table =
-        document.getElementById(
-            "sectorTable"
-        );
-
-
-    if (!sectorData.length) {
-
-        table.innerHTML = `
             <tr>
-                <td
-                    colspan="10"
-                    class="loading-cell"
-                >
-                    Sector data unavailable
+
+                <td>
+                    <strong>
+                        ${safeText(
+                            sector.sector
+                        )}
+                    </strong>
                 </td>
-            </tr>
-        `;
 
-        return;
-    }
-
-
-    table.innerHTML =
-        sectorData
-            .map(row => {
-
-                return `
-                    <tr>
-
-                        <td>
-                            ${escapeHTML(
-                                row.sector_rank
-                            )}
-                        </td>
-
-                        <td>
-                            <strong>
-                                ${escapeHTML(
-                                    row.sector
-                                )}
-                            </strong>
-                        </td>
-
-                        <td>
-                            ${createBadge(
-                                row.type
-                            )}
-                        </td>
-
-                        <td>
-                            <strong>
-                                ${formatNumber(
-                                    row.sector_score
-                                )}
-                            </strong>
-                        </td>
-
-                        <td>
-                            ${createBadge(
-                                row.classification
-                            )}
-                        </td>
-
-                        <td>
-                            ${createBadge(
-                                row.trend
-                            )}
-                        </td>
-
-                        <td>
-                            ${createBadge(
-                                row.momentum
-                            )}
-                        </td>
-
-                        <td>
-                            ${formatPercent(
-                                row.return_20d_pct
-                            )}
-                        </td>
-
-                        <td>
-                            ${formatPercent(
-                                row.return_60d_pct
-                            )}
-                        </td>
-
-                        <td>
-                            ${formatNumber(
-                                row.rsi14
-                            )}
-                        </td>
-
-                    </tr>
-                `;
-            })
-            .join("");
-}
-
-
-/* ============================================================
-   LOAD STOCK DATA
-============================================================ */
-
-async function loadStocks() {
-
-    stockData =
-        await loadCSV(
-            "technical_ranked_test.csv"
-        );
-
-
-    renderStockTable();
-}
-
-
-/* ============================================================
-   STOCK TABLE
-============================================================ */
-
-function renderStockTable() {
-
-    const table =
-        document.getElementById(
-            "stockTable"
-        );
-
-
-    if (!stockData.length) {
-
-        table.innerHTML = `
-            <tr>
-                <td
-                    colspan="10"
-                    class="loading-cell"
-                >
-                    Stock data unavailable
+                <td>
+                    ${safeText(
+                        sector.type
+                    )}
                 </td>
+
+                <td>
+                    ${formatNumber(
+                        sector.sector_score
+                    )}
+                </td>
+
+                <td>
+                    <span class="status-badge
+                        ${statusClass(
+                            sector.classification
+                        )}">
+                        ${safeText(
+                            sector.classification
+                        )}
+                    </span>
+                </td>
+
+                <td>
+                    ${safeText(
+                        sector.trend
+                    )}
+                </td>
+
+                <td>
+                    ${formatPercent(
+                        sector.return_20d_pct
+                    )}
+                </td>
+
+                <td>
+                    ${formatPercent(
+                        sector.return_60d_pct
+                    )}
+                </td>
+
+                <td>
+                    ${formatNumber(
+                        sector.rsi14
+                    )}
+                </td>
+
             </tr>
-        `;
 
-        return;
-    }
+        `).join("");
 
 
-    let filtered =
-        getWatchlistData();
+    container.innerHTML = `
 
+        <table>
 
-    if (!filtered.length) {
+            <thead>
 
-        filtered =
-            stockData;
-    }
+                <tr>
 
+                    <th>Sector</th>
+                    <th>Type</th>
+                    <th>Score</th>
+                    <th>Classification</th>
+                    <th>Trend</th>
+                    <th>20D</th>
+                    <th>60D</th>
+                    <th>RSI</th>
 
-    table.innerHTML =
-        filtered
-            .slice(0, 15)
-            .map(
-                (row, index) => {
+                </tr>
 
-                    return `
-                        <tr>
+            </thead>
 
-                            <td>
-                                ${index + 1}
-                            </td>
+            <tbody>
+                ${rows}
+            </tbody>
 
-                            <td>
+        </table>
 
-                                <span
-                                    class="stock-link"
-                                    onclick="openStock(
-                                        '${escapeHTML(
-                                            row.symbol
-                                        )}'
-                                    )"
-                                >
-                                    ${escapeHTML(
-                                        cleanSymbol(
-                                            row.symbol
-                                        )
-                                    )}
-                                </span>
-
-                            </td>
-
-                            <td>
-                                ${escapeHTML(
-                                    row.sector || "--"
-                                )}
-                            </td>
-
-                            <td>
-                                ${formatPrice(
-                                    row.price
-                                )}
-                            </td>
-
-                            <td>
-                                ${createBadge(
-                                    row.setup
-                                )}
-                            </td>
-
-                            <td>
-                                ${createBadge(
-                                    row.trend
-                                )}
-                            </td>
-
-                            <td>
-                                ${createBadge(
-                                    row.momentum
-                                )}
-                            </td>
-
-                            <td>
-                                ${formatNumber(
-                                    row.rsi14
-                                )}
-                            </td>
-
-                            <td>
-                                ${formatNumber(
-                                    row.volume_ratio
-                                )}x
-                            </td>
-
-                            <td>
-                                ${createRating(
-                                    row
-                                )}
-                            </td>
-
-                        </tr>
-                    `;
-                }
-            )
-            .join("");
-}
-
-
-/* ============================================================
-   WATCHLIST FILTER
-============================================================ */
-
-function getWatchlistData() {
-
-    if (!stockData.length) {
-
-        return [];
-    }
-
-
-    switch (currentWatchlist) {
-
-        case "52w_high":
-
-            return stockData.filter(
-                row =>
-                    Number(
-                        row.distance_from_52w_high_pct
-                    ) >= -5
-            );
-
-
-        case "dma_recovery":
-
-            return stockData.filter(
-                row => {
-
-                    const distance =
-                        Number(
-                            row.distance_from_200dma_pct
-                        );
-
-                    return (
-                        distance >= -5
-                        && distance <= 5
-                    );
-                }
-            );
-
-
-        case "next_day":
-
-            return stockData.filter(
-                row =>
-                    row.setup
-                    &&
-                    !String(
-                        row.setup
-                    ).toLowerCase()
-                    .includes("avoid")
-            );
-
-
-        case "swing":
-
-            return stockData.filter(
-                row =>
-                    row.trend
-                    &&
-                    (
-                        String(
-                            row.trend
-                        ).includes(
-                            "Uptrend"
-                        )
-                        ||
-                        String(
-                            row.trend
-                        ).includes(
-                            "Bullish"
-                        )
-                    )
-            );
-
-
-        case "long_term":
-
-            return stockData.filter(
-                row =>
-                    Number(
-                        row.distance_from_200dma_pct
-                    ) > 0
-            );
-
-
-        case "intraday":
-
-            return stockData.filter(
-                row =>
-                    Number(
-                        row.volume_ratio
-                    ) >= 1.2
-            );
-
-
-        case "options":
-
-            return stockData.filter(
-                row =>
-                    Number(
-                        row.volume_ratio
-                    ) >= 1.2
-            );
-
-
-        default:
-
-            return stockData;
-    }
-}
-
-
-/* ============================================================
-   RATING
-============================================================ */
-
-function createRating(row) {
-
-    let rating =
-        Number(
-            row.total_score
-            || row.technical_score
-            || row.score
-            || 0
-        );
-
-
-    if (
-        !rating
-        && row.trend
-    ) {
-
-        rating =
-            calculateFallbackRating(
-                row
-            );
-    }
-
-
-    let ratingClass =
-        "badge-blue";
-
-
-    if (rating >= 75) {
-
-        ratingClass =
-            "badge-green";
-
-    } else if (rating >= 60) {
-
-        ratingClass =
-            "badge-blue";
-
-    } else if (rating >= 45) {
-
-        ratingClass =
-            "badge-yellow";
-
-    } else if (rating >= 30) {
-
-        ratingClass =
-            "badge-orange";
-
-    } else {
-
-        ratingClass =
-            "badge-red";
-    }
-
-
-    return `
-        <span
-            class="badge ${ratingClass}"
-        >
-            ${Math.round(rating)}
-        </span>
     `;
 }
 
 
-function calculateFallbackRating(row) {
+// ============================================================
+// WATCHLIST
+// ============================================================
 
-    let score = 0;
+function renderWatchlist(
+    watchlistName
+) {
+
+    currentWatchlist =
+        watchlistName;
+
+    const watchlists =
+        dashboardData.watchlists || {};
+
+    const stocks =
+        watchlists[
+            watchlistName
+        ] || [];
 
 
-    const trend =
-        String(
-            row.trend || ""
-        );
+    const container =
+        byId("stockTable");
 
-
-    const momentum =
-        String(
-            row.momentum || ""
-        );
-
-
-    if (
-        trend.includes(
-            "Strong Uptrend"
-        )
-    ) {
-
-        score += 40;
-
-    } else if (
-        trend.includes(
-            "Uptrend"
-        )
-    ) {
-
-        score += 32;
-
-    } else if (
-        trend.includes(
-            "Sideways"
-        )
-    ) {
-
-        score += 20;
-
-    } else if (
-        trend.includes(
-            "Downtrend"
-        )
-    ) {
-
-        score += 8;
+    if (!container) {
+        return;
     }
 
 
-    if (
-        momentum.includes(
-            "Strong Positive"
-        )
-    ) {
+    if (!stocks.length) {
 
-        score += 30;
+        container.innerHTML = `
 
-    } else if (
-        momentum.includes(
-            "Positive"
-        )
-    ) {
+            <div class="empty-state">
 
-        score += 23;
+                <strong>
+                    No stocks currently qualify.
+                </strong>
 
-    } else if (
-        momentum.includes(
-            "Neutral"
-        )
-    ) {
+                <p>
+                    The list will update with the
+                    next market scan.
+                </p>
 
-        score += 15;
+            </div>
 
-    } else {
+        `;
 
-        score += 5;
+        updateWatchlistCount(
+            0
+        );
+
+        return;
     }
 
 
-    const rsi =
-        Number(
-            row.rsi14
+    const topStocks =
+        stocks.slice(
+            0,
+            15
         );
 
 
-    if (
-        rsi >= 50
-        && rsi <= 70
-    ) {
-
-        score += 20;
-
-    } else if (
-        rsi >= 45
-    ) {
-
-        score += 12;
-
-    } else {
-
-        score += 5;
-    }
+    const rows =
+        topStocks.map(
+            (stock, index) =>
+                createStockRow(
+                    stock,
+                    index
+                )
+        ).join("");
 
 
-    const volume =
-        Number(
-            row.volume_ratio
-        );
+    container.innerHTML = `
+
+        <div class="table-toolbar">
+
+            <div>
+                Showing
+                <strong>
+                    ${topStocks.length}
+                </strong>
+                of
+                <strong>
+                    ${stocks.length}
+                </strong>
+                qualifying stocks
+            </div>
+
+            <div class="table-note">
+                Click a stock for full analysis
+            </div>
+
+        </div>
 
 
-    if (
-        volume >= 1.5
-    ) {
+        <div class="table-scroll">
 
-        score += 10;
+            <table>
 
-    } else if (
-        volume >= 1
-    ) {
+                <thead>
 
-        score += 7;
+                    <tr>
 
-    } else {
+                        <th>Rank</th>
+                        <th>Stock</th>
+                        <th>Price</th>
+                        <th>Rating</th>
+                        <th>Setup</th>
+                        <th>Trend</th>
+                        <th>RSI</th>
+                        <th>Vol.</th>
+                        <th>52W High</th>
+                        <th>200 DMA</th>
+                        <th>R:R</th>
 
-        score += 3;
-    }
+                    </tr>
+
+                </thead>
+
+                <tbody>
+                    ${rows}
+                </tbody>
+
+            </table>
+
+        </div>
+
+    `;
 
 
-    return Math.min(
-        score,
-        100
+    updateWatchlistCount(
+        stocks.length
     );
+
+
+    // Make rows clickable
+    document
+        .querySelectorAll(
+            ".stock-row"
+        )
+        .forEach(row => {
+
+            row.addEventListener(
+                "click",
+                () => {
+
+                    const symbol =
+                        row.dataset.symbol;
+
+                    openStockDetail(
+                        symbol
+                    );
+
+                }
+            );
+
+        });
 }
 
 
-/* ============================================================
-   CLEAN SYMBOL
-============================================================ */
+// ============================================================
+// STOCK ROW
+// ============================================================
 
-function cleanSymbol(symbol) {
+function createStockRow(
+    stock,
+    index
+) {
 
-    return String(
-        symbol || ""
-    )
-    .replace(
-        ".NS",
-        ""
-    );
+    const symbol =
+        stock.symbol ||
+        stock.nse_symbol ||
+        "—";
+
+    const company =
+        stock.company_name ||
+        symbol;
+
+
+    const rating =
+        stock.overall_rating ??
+        stock.rating ??
+        stock.total_score;
+
+
+    return `
+
+        <tr
+            class="stock-row"
+            data-symbol="${escapeHtml(
+                symbol
+            )}"
+        >
+
+            <td>
+                ${formatNumber(
+                    index + 1,
+                    0
+                )}
+            </td>
+
+            <td>
+
+                <div class="stock-name">
+
+                    <strong>
+                        ${safeText(
+                            stock.nse_symbol ||
+                            symbol.replace(
+                                ".NS",
+                                ""
+                            )
+                        )}
+                    </strong>
+
+                    <small>
+                        ${safeText(
+                            company
+                        )}
+                    </small>
+
+                </div>
+
+            </td>
+
+            <td>
+                ${formatPrice(
+                    stock.price
+                )}
+            </td>
+
+            <td>
+
+                <span class="
+                    rating-badge
+                    ${ratingClass(
+                        rating
+                    )}
+                ">
+
+                    ${formatNumber(
+                        rating
+                    )}
+
+                </span>
+
+            </td>
+
+            <td>
+
+                <span class="
+                    status-badge
+                    ${statusClass(
+                        stock.setup
+                    )}
+                ">
+
+                    ${safeText(
+                        stock.setup
+                    )}
+
+                </span>
+
+            </td>
+
+            <td>
+                ${safeText(
+                    stock.trend
+                )}
+            </td>
+
+            <td>
+                ${formatNumber(
+                    stock.rsi14
+                )}
+            </td>
+
+            <td>
+                ${formatRatio(
+                    stock.volume_ratio
+                )}x
+            </td>
+
+            <td>
+                ${formatPercent(
+                    stock.distance_from_52w_high_pct
+                )}
+            </td>
+
+            <td>
+                ${formatPercent(
+                    stock.distance_from_200dma_pct
+                )}
+            </td>
+
+            <td>
+                ${formatRatio(
+                    stock.risk_reward
+                )}
+            </td>
+
+        </tr>
+
+    `;
 }
 
 
-/* ============================================================
-   OPEN STOCK
-============================================================ */
+// ============================================================
+// WATCHLIST TABS
+// ============================================================
 
-function openStock(symbol) {
+function setupTabs() {
 
-    const row =
-        stockData.find(
+    const tabs =
+        document.querySelectorAll(
+            ".watchlist-tab"
+        );
+
+    tabs.forEach(tab => {
+
+        tab.addEventListener(
+            "click",
+            () => {
+
+                tabs.forEach(
+                    item =>
+                        item.classList.remove(
+                            "active"
+                        )
+                );
+
+                tab.classList.add(
+                    "active"
+                );
+
+                const watchlist =
+                    tab.dataset.watchlist;
+
+                renderWatchlist(
+                    watchlist
+                );
+
+            }
+        );
+
+    });
+}
+
+
+// ============================================================
+// WATCHLIST COUNT
+// ============================================================
+
+function updateWatchlistCount(
+    count
+) {
+
+    const element =
+        byId("watchlistCount");
+
+    if (element) {
+
+        element.textContent =
+            count.toLocaleString(
+                "en-IN"
+            );
+    }
+}
+
+
+// ============================================================
+// STOCK DETAIL
+// ============================================================
+
+function openStockDetail(
+    symbol
+) {
+
+    const stocks =
+        dashboardData.stocks || [];
+
+    const stock =
+        stocks.find(
             item =>
                 item.symbol === symbol
+                ||
+                item.nse_symbol === symbol
         );
 
 
-    if (!row) {
-
+    if (!stock) {
         return;
     }
 
 
     const modal =
-        document.getElementById(
-            "stockModal"
-        );
-
+        byId("stockModal");
 
     const detail =
-        document.getElementById(
-            "stockDetail"
-        );
+        byId("stockDetail");
+
+
+    if (!modal || !detail) {
+        return;
+    }
 
 
     const rating =
-        calculateFallbackRating(
-            row
-        );
+        stock.overall_rating ??
+        stock.rating ??
+        stock.total_score;
 
 
     detail.innerHTML = `
 
-        <div class="stock-detail-header">
-
-            <div class="stock-detail-title">
-
-                ${escapeHTML(
-                    cleanSymbol(
-                        row.symbol
-                    )
-                )}
-
-            </div>
-
-            <div class="stock-detail-subtitle">
-
-                ${escapeHTML(
-                    row.sector || "NSE Equity"
-                )}
-
-            </div>
-
-        </div>
-
-
-        <div class="rating-card">
+        <div class="detail-header">
 
             <div>
 
-                <div class="card-label">
-                    OVERALL RATING
+                <div class="detail-symbol">
+
+                    ${safeText(
+                        stock.nse_symbol ||
+                        symbol.replace(
+                            ".NS",
+                            ""
+                        )
+                    )}
+
                 </div>
 
-                <div class="rating-number">
-                    ${Math.round(
-                        rating
+                <div class="detail-company">
+
+                    ${safeText(
+                        stock.company_name ||
+                        "NSE Equity"
                     )}
-                    / 100
+
                 </div>
 
             </div>
 
-            <div>
 
-                <div class="card-label">
-                    SETUP
-                </div>
-
-                <div>
-                    ${createBadge(
-                        row.setup
-                        || "Watch"
-                    )}
-                </div>
-
-            </div>
-
-            <div>
-
-                <div class="card-label">
-                    TREND
-                </div>
-
-                <div>
-                    ${createBadge(
-                        row.trend
-                    )}
-                </div>
-
-            </div>
-
-            <div>
-
-                <div class="card-label">
-                    MOMENTUM
-                </div>
-
-                <div>
-                    ${createBadge(
-                        row.momentum
-                    )}
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="detail-section">
-
-            <h3>
-                Technical Analysis
-            </h3>
-
-
-            <div class="detail-grid">
-
-                ${detailItem(
-                    "Price",
-                    formatPrice(
-                        row.price
-                    )
+            <div class="
+                rating-badge
+                large
+                ${ratingClass(
+                    rating
                 )}
+            ">
 
-                ${detailItem(
-                    "SMA 20",
-                    formatPrice(
-                        row.sma20
-                    )
-                )}
-
-                ${detailItem(
-                    "SMA 50",
-                    formatPrice(
-                        row.sma50
-                    )
-                )}
-
-                ${detailItem(
-                    "SMA 100",
-                    formatPrice(
-                        row.sma100
-                    )
-                )}
-
-                ${detailItem(
-                    "SMA 200",
-                    formatPrice(
-                        row.sma200
-                    )
-                )}
-
-                ${detailItem(
-                    "EMA 9",
-                    formatPrice(
-                        row.ema9
-                    )
-                )}
-
-                ${detailItem(
-                    "EMA 20",
-                    formatPrice(
-                        row.ema20
-                    )
-                )}
-
-                ${detailItem(
-                    "EMA 50",
-                    formatPrice(
-                        row.ema50
-                    )
-                )}
-
-                ${detailItem(
-                    "RSI 14",
-                    formatNumber(
-                        row.rsi14
-                    )
-                )}
-
-                ${detailItem(
-                    "ATR 14",
-                    formatNumber(
-                        row.atr14
-                    )
-                )}
-
-                ${detailItem(
-                    "ATR %",
-                    formatPercent(
-                        row.atr_percent
-                    )
-                )}
-
-                ${detailItem(
-                    "Volume Ratio",
-                    formatNumber(
-                        row.volume_ratio
-                    ) + "x"
-                )}
-
-                ${detailItem(
-                    "52W High",
-                    formatPrice(
-                        row["52w_high"]
-                    )
-                )}
-
-                ${detailItem(
-                    "52W Low",
-                    formatPrice(
-                        row["52w_low"]
-                    )
-                )}
-
-                ${detailItem(
-                    "Distance from 52W High",
-                    formatPercent(
-                        row.distance_from_52w_high_pct
-                    )
-                )}
-
-                ${detailItem(
-                    "Distance from 200 DMA",
-                    formatPercent(
-                        row.distance_from_200dma_pct
-                    )
-                )}
-
-                ${detailItem(
-                    "Support",
-                    formatPrice(
-                        row.support
-                    )
-                )}
-
-                ${detailItem(
-                    "Resistance",
-                    formatPrice(
-                        row.resistance
-                    )
-                )}
-
-                ${detailItem(
-                    "Breakout",
-                    row.breakout_status
+                ${formatNumber(
+                    rating
                 )}
 
             </div>
@@ -1361,59 +1121,137 @@ function openStock(symbol) {
         <div class="detail-section">
 
             <h3>
-                Technical Assessment
-            </h3>
-
-            <div>
-
-                ${createBadge(
-                    row.trend
-                )}
-
-                ${createBadge(
-                    row.momentum
-                )}
-
-                ${createBadge(
-                    row.breakout_status
-                )}
-
-            </div>
-
-        </div>
-
-
-        <div class="detail-section">
-
-            <h3>
-                Risk &amp; Setup
+                Overall View
             </h3>
 
             <div class="detail-grid">
 
                 ${detailItem(
                     "Setup",
-                    row.setup || "--"
+                    stock.setup
                 )}
 
                 ${detailItem(
-                    "Support",
-                    formatPrice(
-                        row.support
-                    )
+                    "Trend",
+                    stock.trend
                 )}
 
                 ${detailItem(
-                    "Resistance",
-                    formatPrice(
-                        row.resistance
-                    )
+                    "Momentum",
+                    stock.momentum
                 )}
 
                 ${detailItem(
-                    "Risk / Reward",
+                    "Breakout",
+                    stock.breakout_status
+                )}
+
+                ${detailItem(
+                    "Technical Score",
                     formatNumber(
-                        row.risk_reward
+                        stock.technical_score
+                    )
+                )}
+
+                ${detailItem(
+                    "Fundamental Score",
+                    formatNumber(
+                        stock.fundamental_score
+                    )
+                )}
+
+                ${detailItem(
+                    "Sector Score",
+                    formatNumber(
+                        stock.sector_score
+                    )
+                )}
+
+                ${detailItem(
+                    "Fundamental Quality",
+                    stock.fundamental_quality
+                )}
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                Price & Trend
+            </h3>
+
+            <div class="detail-grid">
+
+                ${detailItem(
+                    "Current Price",
+                    formatPrice(
+                        stock.price
+                    )
+                )}
+
+                ${detailItem(
+                    "Previous Close",
+                    formatPrice(
+                        stock.previous_close
+                    )
+                )}
+
+                ${detailItem(
+                    "Daily Return",
+                    formatPercent(
+                        stock.daily_return_pct
+                    )
+                )}
+
+                ${detailItem(
+                    "SMA 20",
+                    formatPrice(
+                        stock.sma20
+                    )
+                )}
+
+                ${detailItem(
+                    "SMA 50",
+                    formatPrice(
+                        stock.sma50
+                    )
+                )}
+
+                ${detailItem(
+                    "SMA 100",
+                    formatPrice(
+                        stock.sma100
+                    )
+                )}
+
+                ${detailItem(
+                    "SMA 200",
+                    formatPrice(
+                        stock.sma200
+                    )
+                )}
+
+                ${detailItem(
+                    "EMA 9",
+                    formatPrice(
+                        stock.ema9
+                    )
+                )}
+
+                ${detailItem(
+                    "EMA 20",
+                    formatPrice(
+                        stock.ema20
+                    )
+                )}
+
+                ${detailItem(
+                    "EMA 50",
+                    formatPrice(
+                        stock.ema50
                     )
                 )}
 
@@ -1425,22 +1263,353 @@ function openStock(symbol) {
         <div class="detail-section">
 
             <h3>
-                Assessment
+                Momentum & Volatility
             </h3>
 
-            <p>
+            <div class="detail-grid">
 
-                The stock is currently classified as
+                ${detailItem(
+                    "RSI 14",
+                    formatNumber(
+                        stock.rsi14
+                    )
+                )}
 
+                ${detailItem(
+                    "ATR 14",
+                    formatPrice(
+                        stock.atr14
+                    )
+                )}
+
+                ${detailItem(
+                    "ATR %",
+                    formatPercent(
+                        stock.atr_percent
+                    )
+                )}
+
+                ${detailItem(
+                    "Volume Ratio",
+                    formatRatio(
+                        stock.volume_ratio
+                    ) + "x"
+                )}
+
+                ${detailItem(
+                    "Volume",
+                    formatNumber(
+                        stock.volume,
+                        0
+                    )
+                )}
+
+                ${detailItem(
+                    "Avg Volume 20D",
+                    formatNumber(
+                        stock.average_volume_20,
+                        0
+                    )
+                )}
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                52-Week Position
+            </h3>
+
+            <div class="detail-grid">
+
+                ${detailItem(
+                    "52W High",
+                    formatPrice(
+                        stock["52w_high"]
+                    )
+                )}
+
+                ${detailItem(
+                    "52W Low",
+                    formatPrice(
+                        stock["52w_low"]
+                    )
+                )}
+
+                ${detailItem(
+                    "Distance from 52W High",
+                    formatPercent(
+                        stock.distance_from_52w_high_pct
+                    )
+                )}
+
+                ${detailItem(
+                    "Distance from 52W Low",
+                    formatPercent(
+                        stock.distance_from_52w_low_pct
+                    )
+                )}
+
+                ${detailItem(
+                    "Distance from 200 DMA",
+                    formatPercent(
+                        stock.distance_from_200dma_pct
+                    )
+                )}
+
+                ${detailItem(
+                    "Above 200 DMA",
+                    stock.above_200dma
+                        ? "Yes"
+                        : "No"
+                )}
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                Support & Resistance
+            </h3>
+
+            <div class="detail-grid">
+
+                ${detailItem(
+                    "Support",
+                    formatPrice(
+                        stock.support
+                    )
+                )}
+
+                ${detailItem(
+                    "Resistance",
+                    formatPrice(
+                        stock.resistance
+                    )
+                )}
+
+                ${detailItem(
+                    "Risk / Reward",
+                    formatRatio(
+                        stock.risk_reward
+                    )
+                )}
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                Fundamentals
+            </h3>
+
+            <div class="detail-grid">
+
+                ${detailItem(
+                    "Market Cap",
+                    formatLargeNumber(
+                        stock.market_cap
+                    )
+                )}
+
+                ${detailItem(
+                    "Revenue",
+                    formatLargeNumber(
+                        stock.revenue
+                    )
+                )}
+
+                ${detailItem(
+                    "Net Income",
+                    formatLargeNumber(
+                        stock.net_income
+                    )
+                )}
+
+                ${detailItem(
+                    "EPS",
+                    formatNumber(
+                        stock.eps
+                    )
+                )}
+
+                ${detailItem(
+                    "Forward EPS",
+                    formatNumber(
+                        stock.forward_eps
+                    )
+                )}
+
+                ${detailItem(
+                    "ROE",
+                    formatPercent(
+                        stock.roe
+                    )
+                )}
+
+                ${detailItem(
+                    "ROA",
+                    formatPercent(
+                        stock.roa
+                    )
+                )}
+
+                ${detailItem(
+                    "Operating Margin",
+                    formatPercent(
+                        stock.operating_margin
+                    )
+                )}
+
+                ${detailItem(
+                    "Profit Margin",
+                    formatPercent(
+                        stock.profit_margin
+                    )
+                )}
+
+                ${detailItem(
+                    "EBITDA Margin",
+                    formatPercent(
+                        stock.ebitda_margin
+                    )
+                )}
+
+                ${detailItem(
+                    "Debt / Equity",
+                    formatRatio(
+                        stock.debt_equity
+                    )
+                )}
+
+                ${detailItem(
+                    "Current Ratio",
+                    formatRatio(
+                        stock.current_ratio
+                    )
+                )}
+
+                ${detailItem(
+                    "Quick Ratio",
+                    formatRatio(
+                        stock.quick_ratio
+                    )
+                )}
+
+                ${detailItem(
+                    "P/E",
+                    formatRatio(
+                        stock.pe
+                    )
+                )}
+
+                ${detailItem(
+                    "Forward P/E",
+                    formatRatio(
+                        stock.forward_pe
+                    )
+                )}
+
+                ${detailItem(
+                    "PEG",
+                    formatRatio(
+                        stock.peg
+                    )
+                )}
+
+                ${detailItem(
+                    "Price / Book",
+                    formatRatio(
+                        stock.price_to_book
+                    )
+                )}
+
+                ${detailItem(
+                    "Dividend Yield",
+                    formatPercent(
+                        stock.dividend_yield
+                    )
+                )}
+
+                ${detailItem(
+                    "Revenue Growth",
+                    formatPercent(
+                        stock.revenue_growth
+                    )
+                )}
+
+                ${detailItem(
+                    "Earnings Growth",
+                    formatPercent(
+                        stock.earnings_growth
+                    )
+                )}
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                Analysis
+            </h3>
+
+            <div class="analysis-box">
+
+                ${
+                    stock.reasons
+                        ? escapeHtml(
+                            stock.reasons
+                        )
+                        : "No additional analysis available."
+                }
+
+            </div>
+
+        </div>
+
+
+        <div class="detail-section">
+
+            <h3>
+                Data Status
+            </h3>
+
+            <p class="data-status">
+
+                Fundamentals:
                 <strong>
-                    ${escapeHTML(
-                        row.setup
-                        || "Watch"
+                    ${safeText(
+                        stock.fundamental_status ||
+                        (
+                            stock.fundamental_data_available
+                                ? "Available"
+                                : "Data unavailable"
+                        )
                     )}
                 </strong>
 
-                based on the available technical
-                indicators and ranking model.
+                ${
+                    stock.data_source
+                        ? `
+                            · Source:
+                            ${safeText(
+                                stock.data_source
+                            )}
+                          `
+                        : ""
+                }
 
             </p>
 
@@ -1449,15 +1618,20 @@ function openStock(symbol) {
     `;
 
 
-    modal.classList.remove(
-        "hidden"
+    modal.classList.add(
+        "open"
+    );
+
+
+    document.body.classList.add(
+        "modal-open"
     );
 }
 
 
-/* ============================================================
-   DETAIL ITEM
-============================================================ */
+// ============================================================
+// DETAIL ITEM
+// ============================================================
 
 function detailItem(
     label,
@@ -1468,17 +1642,23 @@ function detailItem(
 
         <div class="detail-item">
 
-            <div class="detail-item-label">
-                ${escapeHTML(
+            <span class="detail-label">
+                ${escapeHtml(
                     label
                 )}
-            </div>
+            </span>
 
-            <div class="detail-item-value">
-                ${escapeHTML(
-                    value
-                )}
-            </div>
+            <strong class="detail-value">
+                ${
+                    value === null ||
+                    value === undefined ||
+                    value === ""
+                        ? "—"
+                        : escapeHtml(
+                            String(value)
+                        )
+                }
+            </strong>
 
         </div>
 
@@ -1486,111 +1666,207 @@ function detailItem(
 }
 
 
-/* ============================================================
-   MODAL
-============================================================ */
+// ============================================================
+// LARGE NUMBER
+// ============================================================
 
-function closeModal() {
+function formatLargeNumber(
+    value
+) {
 
-    document
-        .getElementById(
-            "stockModal"
-        )
-        .classList.add(
-            "hidden"
+    if (
+        value === null ||
+        value === undefined ||
+        Number.isNaN(Number(value))
+    ) {
+        return "—";
+    }
+
+
+    const number =
+        Number(value);
+
+
+    if (
+        Math.abs(number)
+        >= 1000000000000
+    ) {
+
+        return (
+            "₹"
+            + formatNumber(
+                number / 1000000000000
+            )
+            + " T"
         );
+    }
+
+
+    if (
+        Math.abs(number)
+        >= 1000000000
+    ) {
+
+        return (
+            "₹"
+            + formatNumber(
+                number / 1000000000
+            )
+            + " B"
+        );
+    }
+
+
+    if (
+        Math.abs(number)
+        >= 10000000
+    ) {
+
+        return (
+            "₹"
+            + formatNumber(
+                number / 10000000
+            )
+            + " Cr"
+        );
+    }
+
+
+    return (
+        "₹"
+        + formatNumber(
+            number
+        )
+    );
 }
 
+
+// ============================================================
+// CLOSE MODAL
+// ============================================================
+
+function closeStockModal() {
+
+    const modal =
+        byId("stockModal");
+
+    if (modal) {
+
+        modal.classList.remove(
+            "open"
+        );
+    }
+
+    document.body.classList.remove(
+        "modal-open"
+    );
+}
+
+
+// ============================================================
+// MODAL EVENTS
+// ============================================================
 
 document.addEventListener(
     "DOMContentLoaded",
     () => {
 
-        document
-            .getElementById(
-                "closeModal"
-            )
-            .addEventListener(
-                "click",
-                closeModal
+        loadDashboard();
+
+
+        const closeButton =
+            document.querySelector(
+                ".modal-close"
             );
 
+        if (closeButton) {
 
-        document
-            .querySelector(
-                ".modal-overlay"
-            )
-            .addEventListener(
+            closeButton.addEventListener(
                 "click",
-                closeModal
+                closeStockModal
             );
 
-
-        document
-            .querySelectorAll(
-                ".tab-button"
-            )
-            .forEach(
-                button => {
-
-                    button.addEventListener(
-                        "click",
-                        () => {
-
-                            document
-                                .querySelectorAll(
-                                    ".tab-button"
-                                )
-                                .forEach(
-                                    item =>
-                                        item.classList.remove(
-                                            "active"
-                                        )
-                                );
+        }
 
 
-                            button.classList.add(
-                                "active"
-                            );
+        const modal =
+            byId("stockModal");
 
+        if (modal) {
 
-                            currentWatchlist =
-                                button.dataset.watchlist;
+            modal.addEventListener(
+                "click",
+                event => {
 
+                    if (
+                        event.target === modal
+                    ) {
 
-                            renderStockTable();
-                        }
-                    );
+                        closeStockModal();
+
+                    }
+
                 }
             );
 
+        }
 
-        loadDashboard();
+
+        document.addEventListener(
+            "keydown",
+            event => {
+
+                if (
+                    event.key === "Escape"
+                ) {
+
+                    closeStockModal();
+
+                }
+
+            }
+        );
 
     }
 );
 
 
-/* ============================================================
-   LOAD COMPLETE DASHBOARD
-============================================================ */
+// ============================================================
+// GENERATED TIME
+// ============================================================
 
-async function loadDashboard() {
+function updateGeneratedTime() {
 
-    document.getElementById(
-        "lastUpdated"
-    ).textContent =
-        "Updated: "
-        + new Date()
-            .toLocaleString(
-                "en-IN"
+    const element =
+        byId("lastUpdated");
+
+    if (
+        !element ||
+        !dashboardData.generated_at
+    ) {
+        return;
+    }
+
+    try {
+
+        const date =
+            new Date(
+                dashboardData.generated_at
             );
 
+        element.textContent =
+            date.toLocaleString(
+                "en-IN",
+                {
+                    dateStyle: "medium",
+                    timeStyle: "short"
+                }
+            );
 
-    await Promise.all([
-        loadMarket(),
-        loadBreadth(),
-        loadSectors(),
-        loadStocks()
-    ]);
+    } catch (error) {
+
+        element.textContent =
+            "Latest market scan";
+
+    }
 }
