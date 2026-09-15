@@ -1,265 +1,360 @@
 import pandas as pd
-from pathlib import Path
+import yfinance as yf
 
-from engines.nse_universe import get_nse_universe
-from engines.market_engine import get_market_regime
+from engines.technical_engine import (
+    calculate_technical_indicators,
+    get_latest_analysis
+)
 
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# MAIN SCANNER
+# STEP 6.3
+# SINGLE STOCK TECHNICAL TEST
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = BASE_DIR / "data"
-OUTPUT_DIR = BASE_DIR / "output"
-
-UNIVERSE_FILE = DATA_DIR / "nse_universe.csv"
+TEST_SYMBOL = "RELIANCE.NS"
 
 
-def create_directories():
+def download_stock_data(symbol, period="2y"):
     """
-    Create required project directories.
+    Download historical OHLCV data for one stock.
     """
 
-    DATA_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    print()
+    print("=" * 60)
+    print(f"Downloading data: {symbol}")
+    print("=" * 60)
 
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    try:
 
-
-def load_nse_universe():
-    """
-    Load the NSE stock universe.
-
-    If the universe file does not exist,
-    download the latest NSE universe.
-    """
-
-    if UNIVERSE_FILE.exists():
-
-        print(
-            "Loading existing NSE universe..."
+        data = yf.download(
+            symbol,
+            period=period,
+            interval="1d",
+            auto_adjust=False,
+            progress=False
         )
 
-        df = pd.read_csv(
-            UNIVERSE_FILE
-        )
+        if data is None or data.empty:
 
-        return df
+            print(
+                f"No data received for {symbol}"
+            )
 
-    print(
-        "NSE universe file not found."
-    )
+            return pd.DataFrame()
 
-    print(
-        "Downloading latest NSE universe..."
-    )
+        # ----------------------------------------------------
+        # Handle yfinance MultiIndex columns
+        # ----------------------------------------------------
 
-    df = get_nse_universe()
+        if isinstance(
+            data.columns,
+            pd.MultiIndex
+        ):
 
-    if df.empty:
+            data.columns = (
+                data.columns
+                .get_level_values(0)
+            )
+
+        # ----------------------------------------------------
+        # Clean data
+        # ----------------------------------------------------
+
+        required_columns = [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+        ]
+
+        missing_columns = [
+            column
+            for column in required_columns
+            if column not in data.columns
+        ]
+
+        if missing_columns:
+
+            print(
+                "Missing columns:"
+            )
+
+            print(
+                missing_columns
+            )
+
+            return pd.DataFrame()
+
+        data = data[
+            required_columns
+        ].copy()
+
+        data = data.dropna()
+
+        return data
+
+    except Exception as e:
 
         print(
-            "Unable to create NSE universe."
+            f"Error downloading {symbol}: {e}"
         )
 
         return pd.DataFrame()
 
-    df.to_csv(
-        UNIVERSE_FILE,
-        index=False
-    )
 
-    return df
-
-
-def analyze_market():
+def test_single_stock(symbol):
     """
-    Run the market engine.
+    Test complete technical analysis
+    for a single stock.
     """
 
-    print()
-    print("=" * 60)
-    print("MARKET ANALYSIS")
-    print("=" * 60)
-
-    market = get_market_regime()
-
-    if not market:
-
-        print(
-            "Market analysis unavailable."
-        )
-
-        return {}
-
-    overall = market.get(
-        "MARKET",
-        {}
+    data = download_stock_data(
+        symbol
     )
 
-    print()
-
-    print(
-        f"Market Regime: "
-        f"{overall.get('regime', 'Unknown')}"
-    )
-
-    print(
-        f"Market Score: "
-        f"{overall.get('market_score', 0)}"
-    )
-
-    print()
-
-    # NIFTY
-    nifty = market.get(
-        "NIFTY 50",
-        {}
-    )
-
-    if nifty:
-
-        print("NIFTY 50")
+    if data.empty:
 
         print(
-            f"Price: {nifty.get('price', 0):.2f}"
-        )
-
-        print(
-            f"Trend: {nifty.get('trend', 'Unknown')}"
-        )
-
-        print(
-            f"Momentum: "
-            f"{nifty.get('momentum', 'Unknown')}"
-        )
-
-        print(
-            f"RSI: "
-            f"{nifty.get('rsi14', 0):.2f}"
-        )
-
-        print(
-            f"Score: "
-            f"{nifty.get('market_score', 0):.2f}"
-        )
-
-        print()
-
-    # BANK NIFTY
-    banknifty = market.get(
-        "BANK NIFTY",
-        {}
-    )
-
-    if banknifty:
-
-        print("BANK NIFTY")
-
-        print(
-            f"Price: "
-            f"{banknifty.get('price', 0):.2f}"
-        )
-
-        print(
-            f"Trend: "
-            f"{banknifty.get('trend', 'Unknown')}"
-        )
-
-        print(
-            f"Momentum: "
-            f"{banknifty.get('momentum', 'Unknown')}"
-        )
-
-        print(
-            f"RSI: "
-            f"{banknifty.get('rsi14', 0):.2f}"
-        )
-
-        print(
-            f"Score: "
-            f"{banknifty.get('market_score', 0):.2f}"
-        )
-
-        print()
-
-    # INDIA VIX
-    vix = market.get(
-        "INDIA VIX",
-        {}
-    )
-
-    if vix:
-
-        print(
-            f"India VIX: "
-            f"{vix.get('value', 0):.2f}"
-        )
-
-    print(
-        "=" * 60
-    )
-
-    return market
-
-
-def show_universe_summary(universe):
-    """
-    Display stock universe summary.
-    """
-
-    print()
-    print("=" * 60)
-    print("NSE STOCK UNIVERSE")
-    print("=" * 60)
-
-    if universe.empty:
-
-        print(
-            "No stocks available."
+            "Stock data unavailable."
         )
 
         return
 
+    print()
     print(
-        f"Total securities: "
-        f"{len(universe)}"
+        f"Historical records: {len(data)}"
+    )
+
+    # --------------------------------------------------------
+    # Run Technical Engine
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "Running Technical Engine..."
+    )
+
+    technical_data = (
+        calculate_technical_indicators(
+            data
+        )
+    )
+
+    if technical_data.empty:
+
+        print(
+            "Technical analysis failed."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Get Latest Analysis
+    # --------------------------------------------------------
+
+    analysis = get_latest_analysis(
+        technical_data
+    )
+
+    if not analysis:
+
+        print(
+            "Unable to generate analysis."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Display Results
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 60)
+    print("TECHNICAL ANALYSIS")
+    print("=" * 60)
+
+    print()
+
+    print(
+        f"Stock              : {symbol}"
+    )
+
+    print(
+        f"Price              : "
+        f"{analysis['price']:.2f}"
+    )
+
+    print(
+        f"Previous Close     : "
+        f"{analysis['previous_close']:.2f}"
+    )
+
+    print(
+        f"Daily Return       : "
+        f"{analysis['daily_return_pct']:.2f}%"
     )
 
     print()
 
-    required_columns = [
-        "SYMBOL",
-        "YAHOO_SYMBOL"
-    ]
-
-    available_columns = [
-        column
-        for column in required_columns
-        if column in universe.columns
-    ]
-
-    if available_columns:
-
-        print(
-            universe[
-                available_columns
-            ].head(10).to_string(
-                index=False
-            )
-        )
+    print("MOVING AVERAGES")
 
     print(
-        "=" * 60
+        f"SMA 20             : "
+        f"{analysis['sma20']:.2f}"
     )
+
+    print(
+        f"SMA 50             : "
+        f"{analysis['sma50']:.2f}"
+    )
+
+    print(
+        f"SMA 100            : "
+        f"{analysis['sma100']:.2f}"
+    )
+
+    print(
+        f"SMA 200            : "
+        f"{analysis['sma200']:.2f}"
+    )
+
+    print()
+
+    print("EXPONENTIAL MOVING AVERAGES")
+
+    print(
+        f"EMA 9              : "
+        f"{analysis['ema9']:.2f}"
+    )
+
+    print(
+        f"EMA 20             : "
+        f"{analysis['ema20']:.2f}"
+    )
+
+    print(
+        f"EMA 50             : "
+        f"{analysis['ema50']:.2f}"
+    )
+
+    print()
+
+    print("MOMENTUM")
+
+    print(
+        f"RSI 14             : "
+        f"{analysis['rsi14']:.2f}"
+    )
+
+    print(
+        f"Trend              : "
+        f"{analysis['trend']}"
+    )
+
+    print(
+        f"Momentum           : "
+        f"{analysis['momentum']}"
+    )
+
+    print()
+
+    print("VOLATILITY")
+
+    print(
+        f"ATR 14             : "
+        f"{analysis['atr14']:.2f}"
+    )
+
+    print(
+        f"ATR %              : "
+        f"{analysis['atr_percent']:.2f}%"
+    )
+
+    print()
+
+    print("VOLUME")
+
+    print(
+        f"Volume             : "
+        f"{analysis['volume']:.0f}"
+    )
+
+    print(
+        f"Average Volume     : "
+        f"{analysis['average_volume_20']:.0f}"
+    )
+
+    print(
+        f"Volume Ratio       : "
+        f"{analysis['volume_ratio']:.2f}x"
+    )
+
+    print()
+
+    print("52-WEEK RANGE")
+
+    print(
+        f"52W High           : "
+        f"{analysis['52w_high']:.2f}"
+    )
+
+    print(
+        f"52W Low            : "
+        f"{analysis['52w_low']:.2f}"
+    )
+
+    print(
+        f"Distance from High : "
+        f"{analysis['distance_from_52w_high_pct']:.2f}%"
+    )
+
+    print(
+        f"Distance from Low  : "
+        f"{analysis['distance_from_52w_low_pct']:.2f}%"
+    )
+
+    print()
+
+    print("200 DMA")
+
+    print(
+        f"Distance from 200DMA : "
+        f"{analysis['distance_from_200dma_pct']:.2f}%"
+    )
+
+    print(
+        f"Above 200 DMA        : "
+        f"{analysis['above_200dma']}"
+    )
+
+    print()
+
+    print("PRICE ACTION")
+
+    print(
+        f"Support            : "
+        f"{analysis['support']:.2f}"
+    )
+
+    print(
+        f"Resistance         : "
+        f"{analysis['resistance']:.2f}"
+    )
+
+    print(
+        f"Breakout Status    : "
+        f"{analysis['breakout_status']}"
+    )
+
+    print()
+
+    print("=" * 60)
+    print("SINGLE STOCK TEST COMPLETE")
+    print("=" * 60)
 
 
 def main():
@@ -267,88 +362,14 @@ def main():
     print()
     print("=" * 60)
     print("NSE SMART MARKET DASHBOARD")
-    print("MAIN SCANNER")
+    print("TECHNICAL ENGINE TEST")
     print("=" * 60)
 
-    # --------------------------------------------------------
-    # STEP 1
-    # --------------------------------------------------------
-
-    create_directories()
-
-    # --------------------------------------------------------
-    # STEP 2
-    # --------------------------------------------------------
-
-    universe = load_nse_universe()
-
-    if universe.empty:
-
-        print()
-        print(
-            "Scanner stopped because "
-            "NSE universe is unavailable."
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # STEP 3
-    # --------------------------------------------------------
-
-    show_universe_summary(
-        universe
+    test_single_stock(
+        TEST_SYMBOL
     )
-
-    # --------------------------------------------------------
-    # STEP 4
-    # --------------------------------------------------------
-
-    market = analyze_market()
-
-    # --------------------------------------------------------
-    # CURRENT STATUS
-    # --------------------------------------------------------
-
-    print()
-
-    print("=" * 60)
-
-    print(
-        "SCANNER FOUNDATION COMPLETE"
-    )
-
-    print("=" * 60)
-
-    print()
-
-    print(
-        "NSE Universe: READY"
-    )
-
-    print(
-        "Market Engine: READY"
-    )
-
-    print(
-        "Technical Engine: READY"
-    )
-
-    print()
-
-    print(
-        "Next stage:"
-    )
-
-    print(
-        "Download historical stock data "
-        "and run technical analysis."
-    )
-
-    print()
-
-    print("=" * 60)
 
 
 if __name__ == "__main__":
+
     main()
