@@ -1,5 +1,6 @@
 import pandas as pd
 import yfinance as yf
+from pathlib import Path
 
 from engines.technical_engine import (
     calculate_technical_indicators,
@@ -9,23 +10,43 @@ from engines.technical_engine import (
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# STEP 6.3
-# SINGLE STOCK TECHNICAL TEST
+# BATCH STOCK SCANNER
 # ============================================================
 
 
-TEST_SYMBOL = "RELIANCE.NS"
+BASE_DIR = Path(__file__).resolve().parent
+
+OUTPUT_DIR = BASE_DIR / "output"
+
+OUTPUT_FILE = (
+    OUTPUT_DIR / "technical_scan_test.csv"
+)
 
 
-def download_stock_data(symbol, period="2y"):
+# ------------------------------------------------------------
+# TEST STOCKS
+# ------------------------------------------------------------
+
+TEST_STOCKS = [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "INFY.NS",
+    "HDFCBANK.NS",
+    "ICICIBANK.NS"
+]
+
+
+def download_stock_data(
+    symbol,
+    period="2y"
+):
     """
-    Download historical OHLCV data for one stock.
+    Download historical OHLCV data.
     """
 
-    print()
-    print("=" * 60)
-    print(f"Downloading data: {symbol}")
-    print("=" * 60)
+    print(
+        f"Downloading: {symbol}"
+    )
 
     try:
 
@@ -40,13 +61,13 @@ def download_stock_data(symbol, period="2y"):
         if data is None or data.empty:
 
             print(
-                f"No data received for {symbol}"
+                f"No data: {symbol}"
             )
 
             return pd.DataFrame()
 
         # ----------------------------------------------------
-        # Handle yfinance MultiIndex columns
+        # Handle MultiIndex returned by yfinance
         # ----------------------------------------------------
 
         if isinstance(
@@ -58,10 +79,6 @@ def download_stock_data(symbol, period="2y"):
                 data.columns
                 .get_level_values(0)
             )
-
-        # ----------------------------------------------------
-        # Clean data
-        # ----------------------------------------------------
 
         required_columns = [
             "Open",
@@ -80,11 +97,8 @@ def download_stock_data(symbol, period="2y"):
         if missing_columns:
 
             print(
-                "Missing columns:"
-            )
-
-            print(
-                missing_columns
+                f"Missing columns for "
+                f"{symbol}: {missing_columns}"
             )
 
             return pd.DataFrame()
@@ -100,16 +114,17 @@ def download_stock_data(symbol, period="2y"):
     except Exception as e:
 
         print(
-            f"Error downloading {symbol}: {e}"
+            f"Error downloading "
+            f"{symbol}: {e}"
         )
 
         return pd.DataFrame()
 
 
-def test_single_stock(symbol):
+def analyze_stock(symbol):
     """
-    Test complete technical analysis
-    for a single stock.
+    Download and technically analyze
+    one stock.
     """
 
     data = download_stock_data(
@@ -118,25 +133,7 @@ def test_single_stock(symbol):
 
     if data.empty:
 
-        print(
-            "Stock data unavailable."
-        )
-
-        return
-
-    print()
-    print(
-        f"Historical records: {len(data)}"
-    )
-
-    # --------------------------------------------------------
-    # Run Technical Engine
-    # --------------------------------------------------------
-
-    print()
-    print(
-        "Running Technical Engine..."
-    )
+        return None
 
     technical_data = (
         calculate_technical_indicators(
@@ -146,15 +143,7 @@ def test_single_stock(symbol):
 
     if technical_data.empty:
 
-        print(
-            "Technical analysis failed."
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Get Latest Analysis
-    # --------------------------------------------------------
+        return None
 
     analysis = get_latest_analysis(
         technical_data
@@ -162,198 +151,199 @@ def test_single_stock(symbol):
 
     if not analysis:
 
+        return None
+
+    analysis["symbol"] = symbol
+
+    return analysis
+
+
+def scan_stocks(symbols):
+    """
+    Scan multiple stocks.
+    """
+
+    results = []
+
+    total = len(symbols)
+
+    print()
+    print("=" * 60)
+
+    print(
+        f"Starting batch scan: "
+        f"{total} stocks"
+    )
+
+    print("=" * 60)
+
+    for number, symbol in enumerate(
+        symbols,
+        start=1
+    ):
+
+        print()
         print(
-            "Unable to generate analysis."
+            f"[{number}/{total}] "
+            f"{symbol}"
+        )
+
+        result = analyze_stock(
+            symbol
+        )
+
+        if result is not None:
+
+            results.append(
+                result
+            )
+
+            print(
+                f"✓ Analysis completed: "
+                f"{symbol}"
+            )
+
+        else:
+
+            print(
+                f"✗ Analysis failed: "
+                f"{symbol}"
+            )
+
+    return results
+
+
+def create_dataframe(results):
+    """
+    Convert analysis results
+    into a dataframe.
+    """
+
+    if not results:
+
+        return pd.DataFrame()
+
+    df = pd.DataFrame(
+        results
+    )
+
+    # --------------------------------------------------------
+    # Put symbol first
+    # --------------------------------------------------------
+
+    if "symbol" in df.columns:
+
+        columns = [
+            "symbol"
+        ] + [
+            column
+            for column in df.columns
+            if column != "symbol"
+        ]
+
+        df = df[
+            columns
+        ]
+
+    # --------------------------------------------------------
+    # Sort by technical strength
+    # --------------------------------------------------------
+
+    if "rsi14" in df.columns:
+
+        df = df.sort_values(
+            by="rsi14",
+            ascending=False
+        )
+
+    return df.reset_index(
+        drop=True
+    )
+
+
+def save_results(df):
+    """
+    Save scanner results.
+    """
+
+    OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    df.to_csv(
+        OUTPUT_FILE,
+        index=False
+    )
+
+    print()
+    print(
+        f"Saved results to:"
+    )
+
+    print(
+        OUTPUT_FILE
+    )
+
+
+def display_results(df):
+    """
+    Display important fields
+    in GitHub Actions log.
+    """
+
+    if df.empty:
+
+        print(
+            "No results available."
         )
 
         return
 
-    # --------------------------------------------------------
-    # Display Results
-    # --------------------------------------------------------
+    display_columns = [
+        "symbol",
+        "price",
+        "daily_return_pct",
+        "sma20",
+        "sma50",
+        "sma200",
+        "rsi14",
+        "atr_percent",
+        "volume_ratio",
+        "52w_high",
+        "52w_low",
+        "distance_from_52w_high_pct",
+        "distance_from_200dma_pct",
+        "above_200dma",
+        "support",
+        "resistance",
+        "trend",
+        "momentum",
+        "breakout_status"
+    ]
+
+    available_columns = [
+        column
+        for column in display_columns
+        if column in df.columns
+    ]
 
     print()
     print("=" * 60)
-    print("TECHNICAL ANALYSIS")
+    print("BATCH SCAN RESULTS")
     print("=" * 60)
 
     print()
 
     print(
-        f"Stock              : {symbol}"
-    )
-
-    print(
-        f"Price              : "
-        f"{analysis['price']:.2f}"
-    )
-
-    print(
-        f"Previous Close     : "
-        f"{analysis['previous_close']:.2f}"
-    )
-
-    print(
-        f"Daily Return       : "
-        f"{analysis['daily_return_pct']:.2f}%"
+        df[
+            available_columns
+        ].to_string(
+            index=False
+        )
     )
 
     print()
-
-    print("MOVING AVERAGES")
-
-    print(
-        f"SMA 20             : "
-        f"{analysis['sma20']:.2f}"
-    )
-
-    print(
-        f"SMA 50             : "
-        f"{analysis['sma50']:.2f}"
-    )
-
-    print(
-        f"SMA 100            : "
-        f"{analysis['sma100']:.2f}"
-    )
-
-    print(
-        f"SMA 200            : "
-        f"{analysis['sma200']:.2f}"
-    )
-
-    print()
-
-    print("EXPONENTIAL MOVING AVERAGES")
-
-    print(
-        f"EMA 9              : "
-        f"{analysis['ema9']:.2f}"
-    )
-
-    print(
-        f"EMA 20             : "
-        f"{analysis['ema20']:.2f}"
-    )
-
-    print(
-        f"EMA 50             : "
-        f"{analysis['ema50']:.2f}"
-    )
-
-    print()
-
-    print("MOMENTUM")
-
-    print(
-        f"RSI 14             : "
-        f"{analysis['rsi14']:.2f}"
-    )
-
-    print(
-        f"Trend              : "
-        f"{analysis['trend']}"
-    )
-
-    print(
-        f"Momentum           : "
-        f"{analysis['momentum']}"
-    )
-
-    print()
-
-    print("VOLATILITY")
-
-    print(
-        f"ATR 14             : "
-        f"{analysis['atr14']:.2f}"
-    )
-
-    print(
-        f"ATR %              : "
-        f"{analysis['atr_percent']:.2f}%"
-    )
-
-    print()
-
-    print("VOLUME")
-
-    print(
-        f"Volume             : "
-        f"{analysis['volume']:.0f}"
-    )
-
-    print(
-        f"Average Volume     : "
-        f"{analysis['average_volume_20']:.0f}"
-    )
-
-    print(
-        f"Volume Ratio       : "
-        f"{analysis['volume_ratio']:.2f}x"
-    )
-
-    print()
-
-    print("52-WEEK RANGE")
-
-    print(
-        f"52W High           : "
-        f"{analysis['52w_high']:.2f}"
-    )
-
-    print(
-        f"52W Low            : "
-        f"{analysis['52w_low']:.2f}"
-    )
-
-    print(
-        f"Distance from High : "
-        f"{analysis['distance_from_52w_high_pct']:.2f}%"
-    )
-
-    print(
-        f"Distance from Low  : "
-        f"{analysis['distance_from_52w_low_pct']:.2f}%"
-    )
-
-    print()
-
-    print("200 DMA")
-
-    print(
-        f"Distance from 200DMA : "
-        f"{analysis['distance_from_200dma_pct']:.2f}%"
-    )
-
-    print(
-        f"Above 200 DMA        : "
-        f"{analysis['above_200dma']}"
-    )
-
-    print()
-
-    print("PRICE ACTION")
-
-    print(
-        f"Support            : "
-        f"{analysis['support']:.2f}"
-    )
-
-    print(
-        f"Resistance         : "
-        f"{analysis['resistance']:.2f}"
-    )
-
-    print(
-        f"Breakout Status    : "
-        f"{analysis['breakout_status']}"
-    )
-
-    print()
-
-    print("=" * 60)
-    print("SINGLE STOCK TEST COMPLETE")
     print("=" * 60)
 
 
@@ -361,13 +351,68 @@ def main():
 
     print()
     print("=" * 60)
-    print("NSE SMART MARKET DASHBOARD")
-    print("TECHNICAL ENGINE TEST")
+
+    print(
+        "NSE SMART MARKET DASHBOARD"
+    )
+
+    print(
+        "BATCH STOCK SCANNER"
+    )
+
     print("=" * 60)
 
-    test_single_stock(
-        TEST_SYMBOL
+    print()
+
+    # --------------------------------------------------------
+    # Scan test stocks
+    # --------------------------------------------------------
+
+    results = scan_stocks(
+        TEST_STOCKS
     )
+
+    # --------------------------------------------------------
+    # Create dataframe
+    # --------------------------------------------------------
+
+    df = create_dataframe(
+        results
+    )
+
+    if df.empty:
+
+        print()
+        print(
+            "No stocks were successfully analyzed."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Save results
+    # --------------------------------------------------------
+
+    save_results(
+        df
+    )
+
+    # --------------------------------------------------------
+    # Display results
+    # --------------------------------------------------------
+
+    display_results(
+        df
+    )
+
+    print()
+    print("=" * 60)
+
+    print(
+        "BATCH SCANNER TEST COMPLETE"
+    )
+
+    print("=" * 60)
 
 
 if __name__ == "__main__":
