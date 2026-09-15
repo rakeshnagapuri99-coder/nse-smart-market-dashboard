@@ -1,2194 +1,2558 @@
-// ============================================================
-// NSE SMART MARKET DASHBOARD V2.1
-// DASHBOARD FRONTEND ENGINE
-// Created by Rakesh Nagapuri
-//
-// STEP 2:
-// - Fixed duplicate market rendering
-// - Fixed sector table rendering
-// - Fixed watchlist rendering
-// - Fixed market data mapping
-// - Preserved stock detail / trade plans
-// - Preserved Portfolio Builder initialization
-// ============================================================
+/* =========================================================
+   NSE SMART MARKET DASHBOARD V3
+   Dashboard frontend
+========================================================= */
 
-let dashboardData = null;
+(() => {
 
-const WATCHLIST_NAMES = {
-
-    next_day:
-        "Next Day Watchlist",
-
-    intraday:
-        "Intraday Watchlist",
-
-    swing:
-        "Equity Swing",
-
-    long_term:
-        "Long-Term Investment",
-
-    "52w_high":
-        "52W High",
-
-    dma_recovery:
-        "200 DMA Recovery",
-
-    momentum:
-        "Momentum Watch",
-
-    breakout:
-        "Breakout Watch",
-
-    options:
-        "Options Watch"
-
-};
+    "use strict";
 
 
-const WATCHLIST_FILES = {
+    /* =====================================================
+       CONFIG
+    ===================================================== */
 
-    next_day:
-        "next_day.xlsx",
+    const DATA_URL =
+        "output/dashboard_data.json?v=" + Date.now();
 
-    intraday:
-        "intraday.xlsx",
+    const TOP_ROWS = 15;
 
-    swing:
-        "swing.xlsx",
+    let dashboardData = {};
 
-    long_term:
-        "long_term.xlsx",
+    let allStocks = [];
 
-    "52w_high":
-        "52w_high.xlsx",
+    let watchlists = {};
 
-    dma_recovery:
-        "dma_recovery.xlsx",
+    let currentWatchlist = "next_day";
 
-    momentum:
-        "momentum.xlsx",
+    let currentWatchlistData = [];
 
-    breakout:
-        "breakout.xlsx",
-
-    options:
-        "options.xlsx"
-
-};
+    let currentFilteredData = [];
 
 
-// ============================================================
-// INITIAL LOAD
-// ============================================================
+    const WATCHLIST_META = {
 
-document.addEventListener(
-    "DOMContentLoaded",
-    loadDashboard
-);
+        next_day: {
+            title: "Next Day Watchlist",
+            short: "Next Day"
+        },
 
+        intraday: {
+            title: "Intraday Watchlist",
+            short: "Intraday"
+        },
 
-async function loadDashboard() {
+        swing: {
+            title: "Equity Swing Watchlist",
+            short: "Swing"
+        },
 
-    try {
+        long_term: {
+            title: "Long-Term Investment",
+            short: "Long Term"
+        },
 
-        const response = await fetch(
+        "52w_high": {
+            title: "52W High Watchlist",
+            short: "52W High"
+        },
 
-            "output/dashboard_data.json?v=" +
-            Date.now(),
+        dma_recovery: {
+            title: "200 DMA Recovery",
+            short: "200 DMA"
+        },
 
-            {
-                cache:
-                    "no-store"
-            }
+        momentum: {
+            title: "Momentum Watchlist",
+            short: "Momentum"
+        },
 
-        );
+        breakout: {
+            title: "Breakout Watchlist",
+            short: "Breakout"
+        },
 
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Unable to load dashboard data."
-            );
-
+        options: {
+            title: "Options Underlying Watch",
+            short: "Options"
         }
-
-
-        dashboardData =
-            await response.json();
-
-
-        normalizeDashboardData();
-
-
-        renderDashboard();
-
-
-        /*
-         * Portfolio Builder must only be
-         * initialized after dashboardData
-         * is completely available.
-         */
-        if (
-            typeof initializePortfolioBuilder ===
-            "function"
-        ) {
-
-            initializePortfolioBuilder();
-
-        }
-
-
-    }
-    catch (error) {
-
-        console.error(
-            "Dashboard loading error:",
-            error
-        );
-
-
-        showDashboardError(
-
-            "Dashboard data could not be loaded. " +
-            "Please run the market scanner first."
-
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// DATA NORMALIZATION
-// ============================================================
-
-function normalizeDashboardData() {
-
-    if (!dashboardData) {
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // MARKET
-    // --------------------------------------------------------
-
-    const source =
-        dashboardData.market_regime ||
-        dashboardData.market ||
-        {};
-
-
-    if (
-        !dashboardData.market ||
-        dashboardData.market ===
-        dashboardData.market_regime
-    ) {
-
-        dashboardData.market = {
-
-            regime:
-                firstValue(
-                    source.market_regime,
-                    source.regime,
-                    "Unavailable"
-                ),
-
-            market_score:
-                firstValue(
-                    source.market_score,
-                    source.score
-                ),
-
-
-            nifty: {
-
-                price:
-                    firstValue(
-                        source.nifty_price,
-                        source.nifty_close,
-                        source.nifty?.price
-                    ),
-
-                previous_close:
-                    firstValue(
-                        source.nifty_previous_close,
-                        source.nifty?.previous_close
-                    ),
-
-                daily_return_pct:
-                    firstValue(
-                        source.nifty_daily_return_pct,
-                        source.nifty_change_pct,
-                        source.nifty?.daily_return_pct
-                    ),
-
-                open:
-                    firstValue(
-                        source.nifty_open,
-                        source.nifty?.open
-                    ),
-
-                high:
-                    firstValue(
-                        source.nifty_high,
-                        source.nifty?.high
-                    ),
-
-                low:
-                    firstValue(
-                        source.nifty_low,
-                        source.nifty?.low
-                    ),
-
-                trend:
-                    firstValue(
-                        source.nifty_trend,
-                        source.nifty?.trend
-                    ),
-
-                momentum:
-                    firstValue(
-                        source.nifty_momentum,
-                        source.nifty?.momentum
-                    ),
-
-                rsi14:
-                    firstValue(
-                        source.nifty_rsi,
-                        source.nifty?.rsi14
-                    )
-
-            },
-
-
-            bank_nifty: {
-
-                price:
-                    firstValue(
-                        source.bank_nifty_price,
-                        source.bank_nifty_close,
-                        source.bank_nifty?.price
-                    ),
-
-                previous_close:
-                    firstValue(
-                        source.bank_nifty_previous_close,
-                        source.bank_nifty?.previous_close
-                    ),
-
-                daily_return_pct:
-                    firstValue(
-                        source.bank_nifty_daily_return_pct,
-                        source.bank_nifty_change_pct,
-                        source.bank_nifty?.daily_return_pct
-                    ),
-
-                open:
-                    firstValue(
-                        source.bank_nifty_open,
-                        source.bank_nifty?.open
-                    ),
-
-                high:
-                    firstValue(
-                        source.bank_nifty_high,
-                        source.bank_nifty?.high
-                    ),
-
-                low:
-                    firstValue(
-                        source.bank_nifty_low,
-                        source.bank_nifty?.low
-                    ),
-
-                trend:
-                    firstValue(
-                        source.bank_nifty_trend,
-                        source.bank_nifty?.trend
-                    ),
-
-                momentum:
-                    firstValue(
-                        source.bank_nifty_momentum,
-                        source.bank_nifty?.momentum
-                    ),
-
-                rsi14:
-                    firstValue(
-                        source.bank_nifty_rsi,
-                        source.bank_nifty?.rsi14
-                    )
-
-            },
-
-
-            vix: {
-
-                price:
-                    firstValue(
-                        source.vix,
-                        source.vix?.price
-                    ),
-
-                previous_close:
-                    firstValue(
-                        source.vix_previous_close,
-                        source.vix?.previous_close
-                    ),
-
-                daily_return_pct:
-                    firstValue(
-                        source.vix_daily_return_pct,
-                        source.vix?.daily_return_pct
-                    ),
-
-                environment:
-                    firstValue(
-                        source.vix_interpretation,
-                        source.vix?.environment
-                    )
-
-            },
-
-
-            equity_environment:
-                source.equity_environment,
-
-            swing_environment:
-                source.swing_environment,
-
-            breakout_environment:
-                source.breakout_environment,
-
-            intraday_environment:
-                source.intraday_environment,
-
-            options_environment:
-                source.options_environment,
-
-
-            market_analysis:
-                firstValue(
-                    source.market_analysis,
-                    source.next_day_analysis,
-                    {}
-                )
-
-        };
-
-    }
-    else {
-
-        /*
-         * Make sure nested market objects
-         * always exist.
-         */
-
-        dashboardData.market =
-            dashboardData.market || {};
-
-        dashboardData.market.nifty =
-            dashboardData.market.nifty || {};
-
-        dashboardData.market.bank_nifty =
-            dashboardData.market.bank_nifty || {};
-
-        dashboardData.market.vix =
-            dashboardData.market.vix || {};
-
-    }
-
-
-    // --------------------------------------------------------
-    // BREADTH
-    // --------------------------------------------------------
-
-    if (
-        !dashboardData.breadth
-    ) {
-
-        const breadthSource =
-            dashboardData.market_breadth ||
-            {};
-
-
-        dashboardData.breadth = {
-
-            stocks_analyzed:
-                firstValue(
-                    breadthSource.stocks_analyzed,
-                    breadthSource.total_stocks
-                ),
-
-            above_20_dma:
-                firstValue(
-                    breadthSource.above_20_dma,
-                    breadthSource.above_20dma
-                ),
-
-            above_50_dma:
-                firstValue(
-                    breadthSource.above_50_dma,
-                    breadthSource.above_50dma
-                ),
-
-            above_200_dma:
-                firstValue(
-                    breadthSource.above_200_dma,
-                    breadthSource.above_200dma
-                ),
-
-            high_52w_count:
-                firstValue(
-                    breadthSource.high_52w_count,
-                    breadthSource["52w_highs"]
-                ),
-
-            low_52w_count:
-                firstValue(
-                    breadthSource.low_52w_count,
-                    breadthSource["52w_lows"]
-                ),
-
-            high_low_ratio:
-                breadthSource.high_low_ratio,
-
-            breadth_score:
-                breadthSource.breadth_score,
-
-            breadth_regime:
-                breadthSource.breadth_regime
-
-        };
-
-    }
-
-
-    // --------------------------------------------------------
-    // SECTORS
-    // --------------------------------------------------------
-
-    if (
-        !Array.isArray(
-            dashboardData.sectors
-        )
-    ) {
-
-        dashboardData.sectors =
-            Array.isArray(
-                dashboardData.sector_analysis
-            )
-                ? dashboardData.sector_analysis
-                : [];
-
-    }
-
-
-    // --------------------------------------------------------
-    // WATCHLISTS
-    // --------------------------------------------------------
-
-    if (
-        !dashboardData.watchlists
-        ||
-        typeof dashboardData.watchlists !==
-        "object"
-    ) {
-
-        dashboardData.watchlists = {};
-
-    }
-
-
-    // --------------------------------------------------------
-    // STOCKS
-    // --------------------------------------------------------
-
-    if (
-        !Array.isArray(
-            dashboardData.stocks
-        )
-    ) {
-
-        dashboardData.stocks = [];
-
-    }
-
-}
-
-
-// ============================================================
-// MAIN RENDER
-// ============================================================
-
-function renderDashboard() {
-
-    if (!dashboardData) {
-        return;
-    }
-
-
-    renderMarketRegime();
-
-    renderMarketIndexCards();
-
-    renderMarketEnvironments();
-
-    renderMarketAnalysis();
-
-    renderBreadth();
-
-    renderSectors();
-
-    renderWatchlists();
-
-    bindModalEvents();
-
-    updateLastUpdated();
-
-    document.body.classList.add(
-        "dashboard-loaded"
-    );
-
-}
-
-
-// ============================================================
-// MARKET REGIME
-// ============================================================
-
-function renderMarketRegime() {
-
-    const container =
-        document.getElementById(
-            "marketRegime"
-        );
-
-
-    if (!container) {
-        return;
-    }
-
-
-    const market =
-        dashboardData.market || {};
-
-
-    const regime =
-        market.regime ||
-        "Unavailable";
-
-
-    const score =
-        market.market_score;
-
-
-    container.innerHTML = `
-
-        <div>
-
-            <div
-                class="regime-badge ${getRegimeClass(
-                    regime
-                )}"
-            >
-                ${escapeHtml(regime)}
-            </div>
-
-            <div class="regime-score">
-
-                Market Score:
-                <strong>
-                    ${formatNumber(score)}
-                </strong>
-
-            </div>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// MARKET INDEX CARDS
-// ============================================================
-
-function renderMarketIndexCards() {
-
-    const niftyContainer =
-        document.getElementById(
-            "niftyPrice"
-        );
-
-    const bankContainer =
-        document.getElementById(
-            "bankNiftyPrice"
-        );
-
-    const vixContainer =
-        document.getElementById(
-            "vixValue"
-        );
-
-
-    const market =
-        dashboardData.market || {};
-
-
-    const nifty =
-        market.nifty || {};
-
-
-    const bank =
-        market.bank_nifty || {};
-
-
-    const vix =
-        market.vix || {};
-
-
-    // --------------------------------------------------------
-    // NIFTY
-    // --------------------------------------------------------
-
-    if (niftyContainer) {
-
-        niftyContainer.textContent =
-            formatPrice(
-                nifty.price
-            );
-
-    }
-
-
-    const niftySecondary =
-        document.getElementById(
-            "niftySecondary"
-        );
-
-
-    if (niftySecondary) {
-
-        niftySecondary.innerHTML =
-
-            isValidNumber(
-                nifty.previous_close
-            )
-
-                ?
-
-                `
-                    Previous Close:
-                    <strong>
-                        ${formatPrice(
-                            nifty.previous_close
-                        )}
-                    </strong>
-                `
-
-                :
-
-                "Previous Close: —";
-
-    }
-
-
-    const niftyMeta =
-        document.getElementById(
-            "niftyMeta"
-        );
-
-
-    if (niftyMeta) {
-
-        niftyMeta.innerHTML = `
-
-            <span>
-                Trend
-                <strong>
-                    ${escapeHtml(
-                        nifty.trend ||
-                        "—"
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                Momentum
-                <strong>
-                    ${escapeHtml(
-                        nifty.momentum ||
-                        "—"
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                RSI
-                <strong>
-                    ${formatNumber(
-                        nifty.rsi14
-                    )}
-                </strong>
-            </span>
-
-        `;
-
-    }
-
-
-    if (niftySecondary) {
-
-        const change =
-            document.createElement(
-                "div"
-            );
-
-        change.className =
-            getChangeClass(
-                nifty.daily_return_pct
-            );
-
-        change.textContent =
-            formatSignedPercent(
-                nifty.daily_return_pct
-            );
-
-        /*
-         * Remove an old change element
-         * if one exists.
-         */
-        const oldChange =
-            document.getElementById(
-                "niftyDailyChange"
-            );
-
-        if (oldChange) {
-            oldChange.remove();
-        }
-
-        change.id =
-            "niftyDailyChange";
-
-        niftySecondary.parentNode.insertBefore(
-            change,
-            niftySecondary.nextSibling
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // BANK NIFTY
-    // --------------------------------------------------------
-
-    if (bankContainer) {
-
-        bankContainer.textContent =
-            formatPrice(
-                bank.price
-            );
-
-    }
-
-
-    const bankSecondary =
-        document.getElementById(
-            "bankNiftySecondary"
-        );
-
-
-    if (bankSecondary) {
-
-        bankSecondary.innerHTML =
-
-            isValidNumber(
-                bank.previous_close
-            )
-
-                ?
-
-                `
-                    Previous Close:
-                    <strong>
-                        ${formatPrice(
-                            bank.previous_close
-                        )}
-                    </strong>
-                `
-
-                :
-
-                "Previous Close: —";
-
-    }
-
-
-    const bankMeta =
-        document.getElementById(
-            "bankNiftyMeta"
-        );
-
-
-    if (bankMeta) {
-
-        bankMeta.innerHTML = `
-
-            <span>
-                Trend
-                <strong>
-                    ${escapeHtml(
-                        bank.trend ||
-                        "—"
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                Momentum
-                <strong>
-                    ${escapeHtml(
-                        bank.momentum ||
-                        "—"
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                RSI
-                <strong>
-                    ${formatNumber(
-                        bank.rsi14
-                    )}
-                </strong>
-            </span>
-
-        `;
-
-    }
-
-
-    if (bankSecondary) {
-
-        const change =
-            document.createElement(
-                "div"
-            );
-
-        change.id =
-            "bankNiftyDailyChange";
-
-        change.className =
-            getChangeClass(
-                bank.daily_return_pct
-            );
-
-        change.textContent =
-            formatSignedPercent(
-                bank.daily_return_pct
-            );
-
-        const oldChange =
-            document.getElementById(
-                "bankNiftyDailyChange"
-            );
-
-        if (oldChange) {
-            oldChange.remove();
-        }
-
-        bankSecondary.parentNode.insertBefore(
-            change,
-            bankSecondary.nextSibling
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // VIX
-    // --------------------------------------------------------
-
-    if (vixContainer) {
-
-        vixContainer.textContent =
-            formatNumber(
-                vix.price
-            );
-
-    }
-
-
-    const vixInterpretation =
-        document.getElementById(
-            "vixInterpretation"
-        );
-
-
-    if (vixInterpretation) {
-
-        vixInterpretation.innerHTML = `
-
-            ${escapeHtml(
-                vix.environment ||
-                "Unavailable"
-            )}
-
-        `;
-
-    }
-
-
-    const vixMeta =
-        document.getElementById(
-            "vixMeta"
-        );
-
-
-    if (vixMeta) {
-
-        vixMeta.innerHTML = `
-
-            <span>
-                Market
-                <strong>
-                    ${escapeHtml(
-                        vix.environment ||
-                        "—"
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                Risk
-                <strong>
-                    ${vixRiskLabel(
-                        vix.price
-                    )}
-                </strong>
-            </span>
-
-            <span>
-                Mode
-                <strong>
-                    ${isValidNumber(
-                        vix.daily_return_pct
-                    )
-                        ? formatSignedPercent(
-                            vix.daily_return_pct
-                        )
-                        : "—"
-                    }
-                </strong>
-            </span>
-
-        `;
-
-    }
-
-}
-
-
-// ============================================================
-// MARKET ENVIRONMENTS
-// ============================================================
-
-function renderMarketEnvironments() {
-
-    const container =
-        document.getElementById(
-            "marketEnvironmentGrid"
-        );
-
-
-    if (!container) {
-        return;
-    }
-
-
-    const market =
-        dashboardData.market || {};
-
-
-    container.innerHTML = `
-
-        ${environmentCard(
-            "Equity",
-            market.equity_environment
-        )}
-
-        ${environmentCard(
-            "Swing",
-            market.swing_environment
-        )}
-
-        ${environmentCard(
-            "Breakout",
-            market.breakout_environment
-        )}
-
-        ${environmentCard(
-            "Intraday",
-            market.intraday_environment
-        )}
-
-        ${environmentCard(
-            "Options",
-            market.options_environment
-        )}
-
-    `;
-
-}
-
-
-function environmentCard(
-    title,
-    value
-) {
-
-    return `
-
-        <div class="environment-card">
-
-            <div class="environment-title">
-                ${escapeHtml(title)}
-            </div>
-
-            <strong class="${getEnvironmentClass(
-                value
-            )}">
-                ${escapeHtml(
-                    value ||
-                    "Unavailable"
-                )}
-            </strong>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// MARKET ANALYSIS
-// ============================================================
-
-function renderMarketAnalysis() {
-
-    const grid =
-        document.getElementById(
-            "marketAnalysisGrid"
-        );
-
-
-    const scenario =
-        document.getElementById(
-            "marketScenario"
-        );
-
-
-    if (!grid) {
-        return;
-    }
-
-
-    const market =
-        dashboardData.market || {};
-
-
-    const analysis =
-        market.market_analysis ||
-        {};
-
-
-    const support =
-        firstValue(
-            analysis.support,
-            analysis.support_zone,
-            analysis.next_day_support,
-            analysis.support_1
-        );
-
-
-    const resistance =
-        firstValue(
-            analysis.resistance,
-            analysis.resistance_zone,
-            analysis.next_day_resistance,
-            analysis.resistance_1
-        );
-
-
-    const pivot =
-        firstValue(
-            analysis.pivot,
-            analysis.pivot_point
-        );
-
-
-    const bullish =
-        firstValue(
-            analysis.bullish_trigger,
-            analysis.bullish_trigger_level
-        );
-
-
-    const bearish =
-        firstValue(
-            analysis.bearish_trigger,
-            analysis.bearish_trigger_level
-        );
-
-
-    grid.innerHTML = `
-
-        ${analysisMetric(
-            "Pivot",
-            pivot
-        )}
-
-        ${analysisMetric(
-            "Support",
-            support
-        )}
-
-        ${analysisMetric(
-            "Resistance",
-            resistance
-        )}
-
-        ${analysisMetric(
-            "Bullish Trigger",
-            bullish
-        )}
-
-        ${analysisMetric(
-            "Bearish Trigger",
-            bearish
-        )}
-
-    `;
-
-
-    if (scenario) {
-
-        const text =
-            firstValue(
-                analysis.scenario,
-                analysis.next_day_scenario,
-                analysis.explanation
-            );
-
-
-        scenario.innerHTML = `
-
-            <strong>
-                Scenario
-            </strong>
-
-            <p>
-                ${
-                    text
-                        ? escapeHtml(
-                            text
-                        )
-                        :
-                        "Market scenario will be generated from the latest market structure."
-                }
-            </p>
-
-        `;
-
-    }
-
-}
-
-
-function analysisMetric(
-    label,
-    value
-) {
-
-    return `
-
-        <div class="analysis-metric">
-
-            <span>
-                ${escapeHtml(label)}
-            </span>
-
-            <strong>
-                ${formatPrice(value)}
-            </strong>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// BREADTH
-// ============================================================
-
-function renderBreadth() {
-
-    const container =
-        document.getElementById(
-            "breadthCards"
-        );
-
-
-    if (!container) {
-        return;
-    }
-
-
-    const breadth =
-        dashboardData.breadth ||
-        {};
-
-
-    if (
-        Object.keys(
-            breadth
-        ).length === 0
-    ) {
-
-        container.innerHTML = `
-
-            <div class="empty-state">
-                Market breadth data unavailable.
-            </div>
-
-        `;
-
-        return;
-
-    }
-
-
-    const total =
-        breadth.stocks_analyzed;
-
-
-    container.innerHTML = `
-
-        ${breadthCard(
-            "Stocks Analysed",
-            formatInteger(
-                total
-            ),
-            ""
-        )}
-
-        ${breadthCard(
-            "Above 20 DMA",
-            formatInteger(
-                breadth.above_20_dma
-            ),
-            percentageOf(
-                breadth.above_20_dma,
-                total
-            )
-        )}
-
-        ${breadthCard(
-            "Above 50 DMA",
-            formatInteger(
-                breadth.above_50_dma
-            ),
-            percentageOf(
-                breadth.above_50_dma,
-                total
-            )
-        )}
-
-        ${breadthCard(
-            "Above 200 DMA",
-            formatInteger(
-                breadth.above_200_dma
-            ),
-            percentageOf(
-                breadth.above_200_dma,
-                total
-            )
-        )}
-
-        ${breadthCard(
-            "52W Highs",
-            formatInteger(
-                breadth.high_52w_count
-            ),
-            ""
-        )}
-
-        ${breadthCard(
-            "52W Lows",
-            formatInteger(
-                breadth.low_52w_count
-            ),
-            ""
-        )}
-
-        ${breadthCard(
-            "High / Low",
-            formatNumber(
-                breadth.high_low_ratio
-            ),
-            ""
-        )}
-
-        ${breadthCard(
-            "Breadth Score",
-            formatNumber(
-                breadth.breadth_score
-            ),
-            breadth.breadth_regime ||
-            ""
-        )}
-
-    `;
-
-}
-
-
-function breadthCard(
-    title,
-    value,
-    subtitle
-) {
-
-    return `
-
-        <div class="breadth-card">
-
-            <div class="breadth-title">
-                ${escapeHtml(title)}
-            </div>
-
-            <div class="breadth-value">
-                ${value}
-            </div>
-
-            ${
-                subtitle
-                    ?
-
-                    `
-                        <div class="breadth-subtitle">
-                            ${escapeHtml(
-                                subtitle
-                            )}
-                        </div>
-                    `
-
-                    :
-
-                    ""
-            }
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// SECTORS
-// ============================================================
-
-function renderSectors() {
-
-    const table =
-        document.getElementById(
-            "sectorTable"
-        );
-
-
-    if (!table) {
-        return;
-    }
-
-
-    const tbody =
-        table.querySelector(
-            "tbody"
-        );
-
-
-    if (!tbody) {
-        return;
-    }
-
-
-    const sectors =
-        Array.isArray(
-            dashboardData.sectors
-        )
-            ? dashboardData.sectors
-            : [];
-
-
-    if (
-        sectors.length === 0
-    ) {
-
-        tbody.innerHTML = `
-
-            <tr>
-
-                <td
-                    colspan="8"
-                    class="empty-state"
-                >
-                    Sector data unavailable.
-                </td>
-
-            </tr>
-
-        `;
-
-        return;
-
-    }
-
-
-    tbody.innerHTML =
-
-        sectors
-            .slice(
-                0,
-                25
-            )
-            .map(
-                (
-                    sector,
-                    index
-                ) => {
-
-                    const name =
-                        sector.sector ||
-                        sector.name ||
-                        sector.index_name ||
-                        "-";
-
-
-                    const price =
-                        firstValue(
-                            sector.price,
-                            sector.close,
-                            sector.last
-                        );
-
-
-                    const performance =
-                        firstValue(
-                            sector.performance_20d_pct,
-                            sector.return_20d_pct,
-                            sector.performance_20d
-                        );
-
-
-                    const strength =
-                        firstValue(
-                            sector.strength,
-                            sector.regime
-                        );
-
-
-                    return `
-
-                        <tr>
-
-                            <td>
-                                ${index + 1}
-                            </td>
-
-                            <td>
-                                <strong>
-                                    ${escapeHtml(
-                                        name
-                                    )}
-                                </strong>
-                            </td>
-
-                            <td>
-                                ${formatPrice(
-                                    price
-                                )}
-                            </td>
-
-                            <td>
-                                ${statusBadge(
-                                    sector.trend
-                                )}
-                            </td>
-
-                            <td>
-                                ${statusBadge(
-                                    sector.momentum
-                                )}
-                            </td>
-
-                            <td class="${getChangeClass(
-                                performance
-                            )}">
-                                ${formatSignedPercent(
-                                    performance
-                                )}
-                            </td>
-
-                            <td>
-                                ${formatNumber(
-                                    sector.score
-                                )}
-                            </td>
-
-                            <td>
-                                ${strength
-                                    ? statusBadge(
-                                        strength
-                                    )
-                                    : "—"
-                                }
-                            </td>
-
-                        </tr>
-
-                    `;
-
-                }
-            )
-            .join("");
-
-}
-
-
-// ============================================================
-// WATCHLISTS
-// ============================================================
-
-function renderWatchlists() {
-
-    setupWatchlistTabs();
-
-
-    const active =
-        document.querySelector(
-            ".watchlist-tab.active"
-        );
-
-
-    const name =
-        active?.dataset.watchlist ||
-        "next_day";
-
-
-    renderWatchlist(
-        name
-    );
-
-}
-
-
-function setupWatchlistTabs() {
-
-    const tabs =
-        document.querySelectorAll(
-            ".watchlist-tab"
-        );
-
-
-    tabs.forEach(
-        tab => {
-
-            if (
-                tab.dataset.bound ===
-                "true"
-            ) {
-                return;
-            }
-
-
-            tab.dataset.bound =
-                "true";
-
-
-            tab.addEventListener(
-                "click",
-                () => {
-
-                    tabs.forEach(
-                        item =>
-                            item.classList.remove(
-                                "active"
-                            )
-                    );
-
-
-                    tab.classList.add(
-                        "active"
-                    );
-
-
-                    renderWatchlist(
-                        tab.dataset.watchlist
-                    );
-
-                }
-            );
-
-        }
-    );
-
-}
-
-
-function renderWatchlist(
-    name
-) {
-
-    const table =
-        document.getElementById(
-            "stockTable"
-        );
-
-
-    const countContainer =
-        document.getElementById(
-            "watchlistCount"
-        );
-
-
-    if (!table) {
-        return;
-    }
-
-
-    const tbody =
-        table.querySelector(
-            "tbody"
-        );
-
-
-    if (!tbody) {
-        return;
-    }
-
-
-    const stocks =
-        Array.isArray(
-            dashboardData.watchlists?.[
-                name
-            ]
-        )
-
-            ?
-
-            dashboardData.watchlists[
-                name
-            ]
-
-            :
-
-            [];
-
-
-    if (countContainer) {
-
-        countContainer.innerHTML = `
-
-            ${formatInteger(
-                stocks.length
-            )}
-
-            stocks in
-
-            <strong>
-                ${escapeHtml(
-                    WATCHLIST_NAMES[
-                        name
-                    ] ||
-                    name
-                )}
-            </strong>
-
-        `;
-
-    }
-
-
-    updateWatchlistDownload(
-        name
-    );
-
-
-    if (
-        stocks.length === 0
-    ) {
-
-        tbody.innerHTML = `
-
-            <tr>
-
-                <td
-                    colspan="15"
-                    class="empty-state"
-                >
-                    No stocks currently match
-                    this watchlist.
-                </td>
-
-            </tr>
-
-        `;
-
-        return;
-
-    }
-
-
-    tbody.innerHTML =
-
-        stocks
-            .slice(
-                0,
-                15
-            )
-            .map(
-                (
-                    stock,
-                    index
-                ) =>
-                    renderStockRow(
-                        stock,
-                        index + 1
-                    )
-            )
-            .join("");
-
-
-    const note =
-        document.getElementById(
-            "watchlistTableNote"
-        );
-
-
-    if (note) {
-
-        note.textContent =
-
-            stocks.length > 15
-
-                ?
-
-                `Showing top 15 of ${stocks.length} stocks. Download Excel for the complete list.`
-
-                :
-
-                "Click any stock to open the detailed technical, fundamental and trade-plan view.";
-
-    }
-
-}
-
-
-// ============================================================
-// STOCK ROW
-// ============================================================
-
-function renderStockRow(
-    stock,
-    rank
-) {
-
-    const symbol =
-        stock.symbol ||
-        stock.nse_symbol ||
-        "-";
-
-
-    const price =
-        firstValue(
-            stock.price,
-            stock.close
-        );
-
-
-    const change =
-        firstValue(
-            stock.daily_return_pct,
-            stock.change_pct
-        );
-
-
-    const score =
-        firstValue(
-            stock.overall_score,
-            stock.rating
-        );
-
-
-    const entry =
-        tradeValue(
-            stock,
-            "entry_price"
-        );
-
-
-    const stop =
-        tradeValue(
-            stock,
-            "stop_loss"
-        );
-
-
-    const target1 =
-        tradeValue(
-            stock,
-            "target_1"
-        );
-
-
-    const target2 =
-        tradeValue(
-            stock,
-            "target_2"
-        );
-
-
-    const rr =
-        firstValue(
-            stock.risk_reward_1,
-            stock.risk_reward
-        );
-
-
-    const setup =
-        stock.setup ||
-        stock.trade_plan_type ||
-        "—";
-
-
-    return `
-
-        <tr
-            class="stock-row"
-            onclick="openStockDetail('${escapeJs(
-                symbol
-            )}')"
-        >
-
-            <td>
-                ${rank}
-            </td>
-
-
-            <td>
-
-                <div class="stock-symbol">
-                    ${escapeHtml(
-                        symbol
-                    )}
-                </div>
-
-                ${
-                    stock.company_name
-                        ?
-
-                        `
-                            <div class="stock-company">
-                                ${escapeHtml(
-                                    stock.company_name
-                                )}
-                            </div>
-                        `
-
-                        :
-
-                        ""
-                }
-
-            </td>
-
-
-            <td>
-                ${formatPrice(
-                    price
-                )}
-            </td>
-
-
-            <td class="${getChangeClass(
-                change
-            )}">
-                ${formatSignedPercent(
-                    change
-                )}
-            </td>
-
-
-            <td>
-                <strong>
-                    ${formatNumber(
-                        score
-                    )}
-                </strong>
-            </td>
-
-
-            <td>
-                ${statusBadge(
-                    setup
-                )}
-            </td>
-
-
-            <td class="trade-entry">
-                ${formatPrice(
-                    entry
-                )}
-            </td>
-
-
-            <td class="trade-stop">
-                ${formatPrice(
-                    stop
-                )}
-            </td>
-
-
-            <td class="trade-target">
-                ${formatPrice(
-                    target1
-                )}
-            </td>
-
-
-            <td class="trade-target">
-                ${formatPrice(
-                    target2
-                )}
-            </td>
-
-
-            <td class="${riskRewardClass(
-                rr
-            )}">
-                ${formatRiskReward(
-                    rr
-                )}
-            </td>
-
-
-            <td>
-                ${statusBadge(
-                    stock.trend
-                )}
-            </td>
-
-
-            <td>
-                ${statusBadge(
-                    stock.momentum
-                )}
-            </td>
-
-
-            <td>
-                ${formatNumber(
-                    stock.rsi14
-                )}
-            </td>
-
-
-            <td>
-                ${
-                    isValidNumber(
-                        stock.volume_ratio
-                    )
-
-                        ?
-
-                        Number(
-                            stock.volume_ratio
-                        ).toFixed(2) +
-                        "x"
-
-                        :
-
-                        "—"
-                }
-            </td>
-
-        </tr>
-
-    `;
-
-}
-
-
-// ============================================================
-// WATCHLIST DOWNLOAD
-// ============================================================
-
-function updateWatchlistDownload(
-    name
-) {
-
-    const button =
-        document.getElementById(
-            "downloadWatchlist"
-        );
-
-
-    if (!button) {
-        return;
-    }
-
-
-    const file =
-        WATCHLIST_FILES[
-            name
-        ];
-
-
-    if (!file) {
-
-        button.style.display =
-            "none";
-
-        return;
-
-    }
-
-
-    button.style.display =
-        "inline-flex";
-
-
-    button.onclick = () => {
-
-        const link =
-            document.createElement(
-                "a"
-            );
-
-
-        link.href =
-            "output/exports/" +
-            file;
-
-
-        link.download =
-            file;
-
-
-        link.target =
-            "_blank";
-
-
-        link.rel =
-            "noopener";
-
-
-        document.body.appendChild(
-            link
-        );
-
-
-        link.click();
-
-
-        link.remove();
 
     };
 
-}
 
+    /* =====================================================
+       HELPERS
+    ===================================================== */
 
-// ============================================================
-// STOCK DETAIL
-// ============================================================
+    function $(id) {
 
-function openStockDetail(
-    symbol
-) {
+        return document.getElementById(id);
 
-    if (!dashboardData) {
-        return;
     }
 
 
-    const stocks =
-        dashboardData.stocks ||
-        [];
+    function number(value) {
+
+        if (
+            value === null ||
+            value === undefined ||
+            value === "" ||
+            String(value).toLowerCase() === "nan"
+        ) {
+
+            return null;
+
+        }
+
+        const n = Number(value);
+
+        return Number.isFinite(n) ? n : null;
+
+    }
 
 
-    let stock =
-        stocks.find(
-            item =>
-                String(
-                    item.symbol ||
-                    item.nse_symbol ||
-                    ""
-                ).toUpperCase()
-                ===
-                String(
-                    symbol
-                ).toUpperCase()
+    function first(obj, keys) {
+
+        if (!obj) return null;
+
+        for (const key of keys) {
+
+            if (
+                obj[key] !== undefined &&
+                obj[key] !== null &&
+                obj[key] !== ""
+            ) {
+
+                return obj[key];
+
+            }
+
+        }
+
+        return null;
+
+    }
+
+
+    function text(value) {
+
+        if (
+            value === null ||
+            value === undefined ||
+            value === ""
+        ) {
+
+            return "—";
+
+        }
+
+        return String(value);
+
+    }
+
+
+    function formatNumber(value, decimals = 2) {
+
+        const n = number(value);
+
+        if (n === null) return "—";
+
+        return n.toLocaleString(
+            "en-IN",
+            {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            }
+        );
+
+    }
+
+
+    function formatPrice(value) {
+
+        const n = number(value);
+
+        if (n === null) return "—";
+
+        return "₹" + formatNumber(n, 2);
+
+    }
+
+
+    function formatPercent(value) {
+
+        const n = number(value);
+
+        if (n === null) return "—";
+
+        return (
+            n > 0 ? "+" : ""
+        ) + n.toFixed(2) + "%";
+
+    }
+
+
+    function formatScore(value) {
+
+        const n = number(value);
+
+        if (n === null) return "—";
+
+        return n.toFixed(1);
+
+    }
+
+
+    function escapeHTML(value) {
+
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+
+    }
+
+
+    function stockArray(value) {
+
+        if (!value) return [];
+
+        if (Array.isArray(value)) {
+
+            return value;
+
+        }
+
+        if (Array.isArray(value.data)) {
+
+            return value.data;
+
+        }
+
+        if (Array.isArray(value.stocks)) {
+
+            return value.stocks;
+
+        }
+
+        if (typeof value === "object") {
+
+            return Object.values(value)
+                .filter(
+                    item =>
+                        item &&
+                        typeof item === "object" &&
+                        !Array.isArray(item)
+                );
+
+        }
+
+        return [];
+
+    }
+
+
+    /* =====================================================
+       STOCK NORMALIZATION
+    ===================================================== */
+
+    function normalizeStock(raw) {
+
+        const s = {
+            ...raw
+        };
+
+
+        s.symbol = text(
+            first(
+                s,
+                [
+                    "symbol",
+                    "Symbol",
+                    "ticker",
+                    "Ticker",
+                    "NSE_Symbol",
+                    "Stock",
+                    "stock"
+                ]
+            )
+        )
+        .replace(".NS", "")
+        .trim();
+
+
+        s.company_name = text(
+            first(
+                s,
+                [
+                    "company_name",
+                    "Company_Name",
+                    "Company",
+                    "company",
+                    "longName",
+                    "name"
+                ]
+            )
         );
 
 
-    /*
-     * If the stock is not present in the
-     * master list, search every watchlist.
-     */
+        /*
+         IMPORTANT:
+         Technical engine uses Close.
+         Therefore Close is explicitly included
+         before generic price fields.
+        */
 
-    if (!stock) {
+        s.price = number(
+            first(
+                s,
+                [
+                    "Close",
+                    "close",
+                    "Price",
+                    "price",
+                    "LTP",
+                    "ltp",
+                    "CMP",
+                    "Current_Price",
+                    "Last_Price"
+                ]
+            )
+        );
 
-        Object.values(
-            dashboardData.watchlists ||
+
+        s.close = number(
+            first(
+                s,
+                [
+                    "Close",
+                    "close",
+                    "Price",
+                    "price",
+                    "LTP",
+                    "ltp",
+                    "CMP"
+                ]
+            )
+        );
+
+
+        s.previous_close = number(
+            first(
+                s,
+                [
+                    "Previous_Close",
+                    "previous_close",
+                    "Prev_Close",
+                    "previousClose"
+                ]
+            )
+        );
+
+
+        s.daily_return_pct = number(
+            first(
+                s,
+                [
+                    "Daily_Return_Pct",
+                    "daily_return_pct",
+                    "Daily_Change_Pct",
+                    "Change_Pct",
+                    "change_pct",
+                    "Change"
+                ]
+            )
+        );
+
+
+        s.sma20 = number(
+            first(
+                s,
+                [
+                    "SMA_20",
+                    "SMA20",
+                    "sma20"
+                ]
+            )
+        );
+
+
+        s.sma50 = number(
+            first(
+                s,
+                [
+                    "SMA_50",
+                    "SMA50",
+                    "sma50"
+                ]
+            )
+        );
+
+
+        s.sma100 = number(
+            first(
+                s,
+                [
+                    "SMA_100",
+                    "SMA100",
+                    "sma100"
+                ]
+            )
+        );
+
+
+        s.sma200 = number(
+            first(
+                s,
+                [
+                    "SMA_200",
+                    "SMA200",
+                    "sma200",
+                    "200_DMA",
+                    "DMA_200"
+                ]
+            )
+        );
+
+
+        s.high52 = number(
+            first(
+                s,
+                [
+                    "52W_High",
+                    "52WHigh",
+                    "Rolling_52W_High",
+                    "High_52W",
+                    "high_52w"
+                ]
+            )
+        );
+
+
+        s.low52 = number(
+            first(
+                s,
+                [
+                    "52W_Low",
+                    "52WLow",
+                    "Rolling_52W_Low",
+                    "Low_52W",
+                    "low_52w"
+                ]
+            )
+        );
+
+
+        s.rsi = number(
+            first(
+                s,
+                [
+                    "RSI14",
+                    "RSI_14",
+                    "rsi14",
+                    "RSI"
+                ]
+            )
+        );
+
+
+        s.volume_ratio = number(
+            first(
+                s,
+                [
+                    "Volume_Ratio",
+                    "volume_ratio",
+                    "Vol_Ratio",
+                    "VolumeRatio"
+                ]
+            )
+        );
+
+
+        s.technical_score = number(
+            first(
+                s,
+                [
+                    "Technical_Score",
+                    "technical_score"
+                ]
+            )
+        );
+
+
+        s.fundamental_score = number(
+            first(
+                s,
+                [
+                    "Fundamental_Score",
+                    "fundamental_score"
+                ]
+            )
+        );
+
+
+        s.overall_score = number(
+            first(
+                s,
+                [
+                    "Overall_Score",
+                    "overall_score",
+                    "Score",
+                    "score",
+                    "Rank_Score"
+                ]
+            )
+        );
+
+
+        s.trend = text(
+            first(
+                s,
+                [
+                    "Trend",
+                    "trend"
+                ]
+            )
+        );
+
+
+        s.momentum = text(
+            first(
+                s,
+                [
+                    "Momentum",
+                    "momentum"
+                ]
+            )
+        );
+
+
+        s.setup = text(
+            first(
+                s,
+                [
+                    "Setup",
+                    "setup",
+                    "Setup_Type",
+                    "setup_type",
+                    "Trade_Setup",
+                    "trade_setup"
+                ]
+            )
+        );
+
+
+        s.sector = text(
+            first(
+                s,
+                [
+                    "Primary_Sector",
+                    "primary_sector",
+                    "Sector",
+                    "sector"
+                ]
+            )
+        );
+
+
+        /* Trade plan */
+
+        s.entry = number(
+            first(
+                s,
+                [
+                    "entry_price",
+                    "Entry_Price",
+                    "Entry",
+                    "entry"
+                ]
+            )
+        );
+
+
+        s.entry_low = number(
+            first(
+                s,
+                [
+                    "entry_low",
+                    "Entry_Low",
+                    "Entry_Zone_Low"
+                ]
+            )
+        );
+
+
+        s.entry_high = number(
+            first(
+                s,
+                [
+                    "entry_high",
+                    "Entry_High",
+                    "Entry_Zone_High"
+                ]
+            )
+        );
+
+
+        s.stop = number(
+            first(
+                s,
+                [
+                    "stop_loss",
+                    "Stop_Loss",
+                    "Stop",
+                    "SL"
+                ]
+            )
+        );
+
+
+        s.target1 = number(
+            first(
+                s,
+                [
+                    "target_1",
+                    "Target_1",
+                    "T1"
+                ]
+            )
+        );
+
+
+        s.target2 = number(
+            first(
+                s,
+                [
+                    "target_2",
+                    "Target_2",
+                    "T2"
+                ]
+            )
+        );
+
+
+        s.rr = number(
+            first(
+                s,
+                [
+                    "risk_reward_1",
+                    "Risk_Reward_1",
+                    "risk_reward",
+                    "Risk_Reward",
+                    "RR"
+                ]
+            )
+        );
+
+
+        s.plan_status = text(
+            first(
+                s,
+                [
+                    "trade_plan_status",
+                    "Trade_Plan_Status",
+                    "Plan_Status"
+                ]
+            )
+        );
+
+
+        s.plan_type = text(
+            first(
+                s,
+                [
+                    "trade_plan_type",
+                    "Trade_Plan_Type",
+                    "Plan_Type"
+                ]
+            )
+        );
+
+
+        s.plan_reason = text(
+            first(
+                s,
+                [
+                    "trade_plan_reason",
+                    "Trade_Plan_Reason",
+                    "Plan_Reason"
+                ]
+            )
+        );
+
+
+        s.invalidation = text(
+            first(
+                s,
+                [
+                    "trade_plan_invalidation",
+                    "Trade_Plan_Invalidation",
+                    "Invalidation"
+                ]
+            )
+        );
+
+
+        s.trade_quality = text(
+            first(
+                s,
+                [
+                    "trade_plan_quality",
+                    "Trade_Plan_Quality",
+                    "Trade_Quality"
+                ]
+            )
+        );
+
+
+        return s;
+
+    }
+
+
+    /* =====================================================
+       DATA EXTRACTION
+    ===================================================== */
+
+    function normalizeDashboardData(data) {
+
+        dashboardData = data || {};
+
+
+        /*
+         Try all common locations.
+        */
+
+        const possibleStocks = [
+
+            data.stocks,
+
+            data.stock_data,
+
+            data.ranked_stocks,
+
+            data.ranking,
+
+            data.data?.stocks,
+
+            data.dashboard?.stocks
+
+        ];
+
+
+        let rawStocks = [];
+
+
+        for (const source of possibleStocks) {
+
+            const arr = stockArray(source);
+
+            if (arr.length > 0) {
+
+                rawStocks = arr;
+
+                break;
+
+            }
+
+        }
+
+
+        allStocks = rawStocks
+            .map(normalizeStock)
+            .filter(
+                stock =>
+                    stock.symbol &&
+                    stock.symbol !== "—"
+            );
+
+
+        /*
+         Watchlists
+        */
+
+        const rawWatchlists =
+            data.watchlists ||
+            data.watchlist ||
+            data.data?.watchlists ||
+            data.dashboard?.watchlists ||
+            {};
+
+
+        watchlists = {};
+
+
+        Object.keys(WATCHLIST_META).forEach(
+            key => {
+
+                const source =
+                    rawWatchlists[key] ||
+                    rawWatchlists[
+                        WATCHLIST_META[key].title
+                    ] ||
+                    [];
+
+
+                watchlists[key] =
+                    stockArray(source)
+                        .map(normalizeStock)
+                        .filter(
+                            stock =>
+                                stock.symbol &&
+                                stock.symbol !== "—"
+                        );
+
+            }
+        );
+
+
+        /*
+         If backend has stocks but no watchlists,
+         create practical fallback lists.
+        */
+
+        if (
+            !Object.values(watchlists)
+                .some(list => list.length > 0)
+        ) {
+
+            buildFallbackWatchlists();
+
+        }
+
+    }
+
+
+    /* =====================================================
+       FALLBACK WATCHLISTS
+    ===================================================== */
+
+    function sortedStocks() {
+
+        return [...allStocks]
+            .sort(
+                (a, b) =>
+                    (b.overall_score || 0) -
+                    (a.overall_score || 0)
+            );
+
+    }
+
+
+    function buildFallbackWatchlists() {
+
+        const stocks = sortedStocks();
+
+
+        const positiveTrend = stock =>
+            /positive|strong|bull/i.test(
+                stock.trend
+            );
+
+
+        const momentum = stock =>
+            /positive|strong/i.test(
+                stock.momentum
+            );
+
+
+        watchlists.next_day =
+            stocks.filter(
+                stock =>
+                    /breakout|momentum|recovery/i.test(
+                        stock.setup
+                    ) ||
+                    (
+                        positiveTrend(stock) &&
+                        stock.price !== null &&
+                        stock.sma200 !== null &&
+                        stock.price > stock.sma200
+                    )
+            );
+
+
+        watchlists.intraday =
+            stocks.filter(
+                stock =>
+                    /breakout|momentum/i.test(
+                        stock.setup
+                    ) &&
+                    (stock.volume_ratio || 0) >= 1.2
+            );
+
+
+        watchlists.swing =
+            stocks.filter(
+                stock =>
+                    /breakout|momentum|recovery|swing/i.test(
+                        stock.setup
+                    ) ||
+                    positiveTrend(stock)
+            );
+
+
+        watchlists.long_term =
+            stocks.filter(
+                stock =>
+                    stock.price !== null &&
+                    stock.sma200 !== null &&
+                    stock.price > stock.sma200 &&
+                    (stock.overall_score || 0) >= 55
+            );
+
+
+        watchlists["52w_high"] =
+            stocks.filter(
+                stock =>
+                    /52w|high/i.test(
+                        stock.setup
+                    ) ||
+                    (
+                        stock.price !== null &&
+                        stock.high52 !== null &&
+                        stock.price >=
+                        stock.high52 * 0.97
+                    )
+            );
+
+
+        watchlists.dma_recovery =
+            stocks.filter(
+                stock =>
+                    /200|dma|recovery/i.test(
+                        stock.setup
+                    ) ||
+                    (
+                        stock.price !== null &&
+                        stock.sma200 !== null &&
+                        Math.abs(
+                            stock.price /
+                            stock.sma200 - 1
+                        ) <= 0.03
+                    )
+            );
+
+
+        watchlists.momentum =
+            stocks.filter(
+                stock =>
+                    /momentum/i.test(
+                        stock.setup
+                    ) ||
+                    momentum(stock)
+            );
+
+
+        watchlists.breakout =
+            stocks.filter(
+                stock =>
+                    /breakout/i.test(
+                        stock.setup
+                    )
+            );
+
+
+        watchlists.options =
+            stocks.filter(
+                stock =>
+                    /breakout|momentum|52w/i.test(
+                        stock.setup
+                    ) &&
+                    (stock.overall_score || 0) >= 50
+            );
+
+    }
+
+
+    /* =====================================================
+       MARKET DATA
+    ===================================================== */
+
+    function getMarketObject() {
+
+        return (
+            dashboardData.market_regime ||
+            dashboardData.market ||
+            dashboardData.market_context ||
+            dashboardData.dashboard?.market_regime ||
             {}
-        ).forEach(
-            list => {
+        );
+
+    }
+
+
+    function getBreadthObject() {
+
+        return (
+            dashboardData.market_breadth ||
+            dashboardData.breadth ||
+            dashboardData.dashboard?.market_breadth ||
+            {}
+        );
+
+    }
+
+
+    function getSectorData() {
+
+        return stockArray(
+            dashboardData.sector_analysis ||
+            dashboardData.sectors ||
+            dashboardData.dashboard?.sector_analysis ||
+            []
+        );
+
+    }
+
+
+    /* =====================================================
+       MARKET REGIME
+    ===================================================== */
+
+    function regimeClass(regime) {
+
+        const r =
+            String(regime || "")
+                .toLowerCase();
+
+
+        if (
+            r.includes("bull")
+        ) {
+
+            return "regime-bullish";
+
+        }
+
+
+        if (
+            r.includes("bear")
+        ) {
+
+            return "regime-bearish";
+
+        }
+
+
+        if (
+            r.includes("weak") ||
+            r.includes("caution") ||
+            r.includes("risk")
+        ) {
+
+            return "regime-caution";
+
+        }
+
+
+        return "regime-neutral";
+
+    }
+
+
+    function renderMarketRegime() {
+
+        const container =
+            $("marketRegime");
+
+        if (!container) return;
+
+
+        const market =
+            getMarketObject();
+
+
+        const regime =
+            first(
+                market,
+                [
+                    "market_regime",
+                    "Market_Regime",
+                    "regime",
+                    "Regime"
+                ]
+            ) ||
+            dashboardData.market_regime_name ||
+            dashboardData.regime ||
+            "Unavailable";
+
+
+        const marketScore =
+            number(
+                first(
+                    market,
+                    [
+                        "market_score",
+                        "Market_Score",
+                        "score",
+                        "Score"
+                    ]
+                )
+            );
+
+
+        const description =
+            first(
+                market,
+                [
+                    "regime_description",
+                    "market_description",
+                    "description",
+                    "interpretation"
+                ]
+            );
+
+
+        container.innerHTML = `
+
+            <div class="regime-main">
+
+                <div>
+
+                    <div class="regime-label">
+                        CURRENT MARKET ENVIRONMENT
+                    </div>
+
+                    <div style="margin-top:8px">
+
+                        <span class="regime-badge ${regimeClass(regime)}">
+                            ${escapeHTML(regime)}
+                        </span>
+
+                    </div>
+
+                    ${
+                        description
+                        ?
+                        `<div class="regime-description">
+                            ${escapeHTML(description)}
+                        </div>`
+                        :
+                        ""
+                    }
+
+                </div>
+
+
+                <div class="regime-score">
+
+                    <strong>
+                        ${marketScore === null
+                            ? "—"
+                            : marketScore.toFixed(2)}
+                    </strong>
+
+                    <small>
+                        / 100
+                    </small>
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /* =====================================================
+       MARKET INDEX
+    ===================================================== */
+
+    function getIndexData(prefix) {
+
+        const market =
+            getMarketObject();
+
+
+        const result = {};
+
+
+        if (prefix === "nifty") {
+
+            result.price =
+                number(
+                    first(
+                        market,
+                        [
+                            "nifty_price",
+                            "Nifty_Price",
+                            "nifty_close",
+                            "nifty_last_close"
+                        ]
+                    )
+                );
+
+
+            result.previous =
+                number(
+                    first(
+                        market,
+                        [
+                            "nifty_previous_close",
+                            "Nifty_Previous_Close",
+                            "nifty_prev_close"
+                        ]
+                    )
+                );
+
+
+            result.change =
+                number(
+                    first(
+                        market,
+                        [
+                            "nifty_daily_return_pct",
+                            "nifty_change_pct",
+                            "nifty_daily_change"
+                        ]
+                    )
+                );
+
+
+            result.trend =
+                first(
+                    market,
+                    [
+                        "nifty_trend",
+                        "Nifty_Trend"
+                    ]
+                );
+
+
+            result.momentum =
+                first(
+                    market,
+                    [
+                        "nifty_momentum",
+                        "Nifty_Momentum"
+                    ]
+                );
+
+
+            result.rsi =
+                number(
+                    first(
+                        market,
+                        [
+                            "nifty_rsi",
+                            "Nifty_RSI"
+                        ]
+                    )
+                );
+
+        }
+
+
+        if (prefix === "bank") {
+
+            result.price =
+                number(
+                    first(
+                        market,
+                        [
+                            "bank_nifty_price",
+                            "Bank_Nifty_Price",
+                            "bank_nifty_close"
+                        ]
+                    )
+                );
+
+
+            result.previous =
+                number(
+                    first(
+                        market,
+                        [
+                            "bank_nifty_previous_close",
+                            "Bank_Nifty_Previous_Close",
+                            "bank_nifty_prev_close"
+                        ]
+                    )
+                );
+
+
+            result.change =
+                number(
+                    first(
+                        market,
+                        [
+                            "bank_nifty_daily_return_pct",
+                            "bank_nifty_change_pct",
+                            "bank_nifty_daily_change"
+                        ]
+                    )
+                );
+
+
+            result.trend =
+                first(
+                    market,
+                    [
+                        "bank_nifty_trend",
+                        "Bank_Nifty_Trend"
+                    ]
+                );
+
+
+            result.momentum =
+                first(
+                    market,
+                    [
+                        "bank_nifty_momentum",
+                        "Bank_Nifty_Momentum"
+                    ]
+                );
+
+
+            result.rsi =
+                number(
+                    first(
+                        market,
+                        [
+                            "bank_nifty_rsi",
+                            "Bank_Nifty_RSI"
+                        ]
+                    )
+                );
+
+        }
+
+
+        return result;
+
+    }
+
+
+    function renderMarketIndices() {
+
+        const nifty =
+            getIndexData("nifty");
+
+
+        const bank =
+            getIndexData("bank");
+
+
+        if ($("niftyPrice")) {
+
+            $("niftyPrice").textContent =
+                formatPrice(nifty.price);
+
+        }
+
+
+        if ($("niftySecondary")) {
+
+            let secondary = "Last completed close";
+
+            if (nifty.change !== null) {
+
+                secondary +=
+                    " • " +
+                    formatPercent(nifty.change);
+
+            }
+
+            $("niftySecondary").textContent =
+                secondary;
+
+            $("niftySecondary").className =
+                "index-secondary " +
+                (
+                    nifty.change > 0
+                        ? "positive"
+                        : nifty.change < 0
+                            ? "negative"
+                            : "neutral"
+                );
+
+        }
+
+
+        if ($("niftyTrend")) {
+
+            $("niftyTrend").textContent =
+                text(nifty.trend);
+
+        }
+
+
+        if ($("niftyMomentum")) {
+
+            $("niftyMomentum").textContent =
+                text(nifty.momentum);
+
+        }
+
+
+        if ($("niftyRSI")) {
+
+            $("niftyRSI").textContent =
+                nifty.rsi === null
+                    ? "—"
+                    : nifty.rsi.toFixed(1);
+
+        }
+
+
+        if ($("niftyMeta")) {
+
+            $("niftyMeta").setAttribute(
+                "title",
+                nifty.previous !== null
+                    ? "Previous close: " +
+                      formatPrice(nifty.previous)
+                    : ""
+            );
+
+        }
+
+
+        if ($("bankNiftyPrice")) {
+
+            $("bankNiftyPrice").textContent =
+                formatPrice(bank.price);
+
+        }
+
+
+        if ($("bankNiftySecondary")) {
+
+            let secondary =
+                "Last completed close";
+
+            if (bank.change !== null) {
+
+                secondary +=
+                    " • " +
+                    formatPercent(bank.change);
+
+            }
+
+            $("bankNiftySecondary").textContent =
+                secondary;
+
+            $("bankNiftySecondary").className =
+                "index-secondary " +
+                (
+                    bank.change > 0
+                        ? "positive"
+                        : bank.change < 0
+                            ? "negative"
+                            : "neutral"
+                );
+
+        }
+
+
+        if ($("bankNiftyTrend")) {
+
+            $("bankNiftyTrend").textContent =
+                text(bank.trend);
+
+        }
+
+
+        if ($("bankNiftyMomentum")) {
+
+            $("bankNiftyMomentum").textContent =
+                text(bank.momentum);
+
+        }
+
+
+        if ($("bankNiftyRSI")) {
+
+            $("bankNiftyRSI").textContent =
+                bank.rsi === null
+                    ? "—"
+                    : bank.rsi.toFixed(1);
+
+        }
+
+
+        if ($("bankNiftyMeta")) {
+
+            $("bankNiftyMeta").setAttribute(
+                "title",
+                bank.previous !== null
+                    ? "Previous close: " +
+                      formatPrice(bank.previous)
+                    : ""
+            );
+
+        }
+
+
+        const market =
+            getMarketObject();
+
+
+        const vix =
+            number(
+                first(
+                    market,
+                    [
+                        "vix",
+                        "india_vix",
+                        "India_VIX",
+                        "vix_value"
+                    ]
+                )
+            );
+
+
+        const vixInterpretation =
+            first(
+                market,
+                [
+                    "vix_interpretation",
+                    "vix_status",
+                    "vix_environment"
+                ]
+            );
+
+
+        if ($("vixValue")) {
+
+            $("vixValue").textContent =
+                vix === null
+                    ? "Unavailable"
+                    : vix.toFixed(2);
+
+        }
+
+
+        if ($("vixInterpretation")) {
+
+            $("vixInterpretation").textContent =
+                text(vixInterpretation);
+
+        }
+
+
+        if ($("vixMarket")) {
+
+            $("vixMarket").textContent =
+                text(
+                    first(
+                        market,
+                        [
+                            "vix_market",
+                            "vix_market_condition"
+                        ]
+                    )
+                );
+
+        }
+
+
+        if ($("vixRisk")) {
+
+            $("vixRisk").textContent =
+                text(
+                    first(
+                        market,
+                        [
+                            "vix_risk",
+                            "vix_risk_level"
+                        ]
+                    )
+                );
+
+        }
+
+
+        if ($("vixMode")) {
+
+            $("vixMode").textContent =
+                text(
+                    first(
+                        market,
+                        [
+                            "vix_mode",
+                            "volatility_mode"
+                        ]
+                    )
+                );
+
+        }
+
+    }
+
+
+    /* =====================================================
+       ENVIRONMENT
+    ===================================================== */
+
+    function renderEnvironment() {
+
+        const container =
+            $("marketEnvironmentGrid");
+
+        if (!container) return;
+
+
+        const market =
+            getMarketObject();
+
+
+        const environments = [
+
+            [
+                "Equity",
+                first(
+                    market,
+                    [
+                        "equity_environment",
+                        "Equity_Environment"
+                    ]
+                )
+            ],
+
+            [
+                "Swing",
+                first(
+                    market,
+                    [
+                        "swing_environment",
+                        "Swing_Environment"
+                    ]
+                )
+            ],
+
+            [
+                "Breakout",
+                first(
+                    market,
+                    [
+                        "breakout_environment",
+                        "Breakout_Environment"
+                    ]
+                )
+            ],
+
+            [
+                "Intraday",
+                first(
+                    market,
+                    [
+                        "intraday_environment",
+                        "Intraday_Environment"
+                    ]
+                )
+            ],
+
+            [
+                "Options",
+                first(
+                    market,
+                    [
+                        "options_environment",
+                        "Options_Environment"
+                    ]
+                )
+            ]
+
+        ];
+
+
+        container.innerHTML =
+            environments
+                .map(
+                    ([label, value]) => `
+
+                        <div class="environment-card">
+
+                            <span>
+                                ${label}
+                            </span>
+
+                            <strong class="${valueClass(value)}">
+                                ${escapeHTML(
+                                    text(value)
+                                )}
+                            </strong>
+
+                        </div>
+
+                    `
+                )
+                .join("");
+
+    }
+
+
+    function valueClass(value) {
+
+        const v =
+            String(value || "")
+                .toLowerCase();
+
+
+        if (
+            v.includes("bull") ||
+            v.includes("positive") ||
+            v.includes("strong") ||
+            v.includes("selective")
+        ) {
+
+            return "positive";
+
+        }
+
+
+        if (
+            v.includes("bear") ||
+            v.includes("avoid") ||
+            v.includes("weak") ||
+            v.includes("high risk")
+        ) {
+
+            return "negative";
+
+        }
+
+
+        if (
+            v.includes("caution") ||
+            v.includes("moderate") ||
+            v.includes("watch")
+        ) {
+
+            return "text-amber";
+
+        }
+
+
+        return "neutral";
+
+    }
+
+
+    /* =====================================================
+       MARKET ANALYSIS
+    ===================================================== */
+
+    function renderMarketAnalysis() {
+
+        const market =
+            getMarketObject();
+
+
+        const support =
+            first(
+                market,
+                [
+                    "nifty_support",
+                    "support",
+                    "support_zone",
+                    "next_day_support"
+                ]
+            );
+
+
+        const resistance =
+            first(
+                market,
+                [
+                    "nifty_resistance",
+                    "resistance",
+                    "resistance_zone",
+                    "next_day_resistance"
+                ]
+            );
+
+
+        const pivot =
+            first(
+                market,
+                [
+                    "nifty_pivot",
+                    "pivot",
+                    "pivot_level"
+                ]
+            );
+
+
+        const bullish =
+            first(
+                market,
+                [
+                    "bullish_trigger",
+                    "nifty_bullish_trigger",
+                    "bullishTrigger"
+                ]
+            );
+
+
+        const bearish =
+            first(
+                market,
+                [
+                    "bearish_trigger",
+                    "nifty_bearish_trigger",
+                    "bearishTrigger"
+                ]
+            );
+
+
+        if ($("marketSupport")) {
+
+            $("marketSupport").textContent =
+                formatPossibleLevel(support);
+
+        }
+
+
+        if ($("marketResistance")) {
+
+            $("marketResistance").textContent =
+                formatPossibleLevel(resistance);
+
+        }
+
+
+        if ($("marketPivot")) {
+
+            $("marketPivot").textContent =
+                formatPossibleLevel(pivot);
+
+        }
+
+
+        if ($("bullishTrigger")) {
+
+            $("bullishTrigger").textContent =
+                formatPossibleLevel(bullish);
+
+        }
+
+
+        if ($("bearishTrigger")) {
+
+            $("bearishTrigger").textContent =
+                formatPossibleLevel(bearish);
+
+        }
+
+
+        const scenario =
+            first(
+                market,
+                [
+                    "market_scenario",
+                    "scenario",
+                    "next_day_scenario",
+                    "scenario_explanation",
+                    "market_analysis"
+                ]
+            );
+
+
+        if ($("marketScenario")) {
+
+            $("marketScenario").textContent =
+                scenario
+                    ? String(scenario)
+                    : generateMarketScenario();
+
+        }
+
+    }
+
+
+    function formatPossibleLevel(value) {
+
+        if (value === null || value === undefined) {
+
+            return "—";
+
+        }
+
+
+        const n = number(value);
+
+        if (n !== null) {
+
+            return formatPrice(n);
+
+        }
+
+
+        return String(value);
+
+    }
+
+
+    function generateMarketScenario() {
+
+        const market =
+            getMarketObject();
+
+
+        const regime =
+            String(
+                first(
+                    market,
+                    [
+                        "market_regime",
+                        "regime"
+                    ]
+                ) || ""
+            ).toLowerCase();
+
+
+        const niftyTrend =
+            String(
+                first(
+                    market,
+                    [
+                        "nifty_trend"
+                    ]
+                ) || ""
+            ).toLowerCase();
+
+
+        const niftyMomentum =
+            String(
+                first(
+                    market,
+                    [
+                        "nifty_momentum"
+                    ]
+                ) || ""
+            ).toLowerCase();
+
+
+        if (
+            regime.includes("bear") ||
+            regime.includes("weak")
+        ) {
+
+            return (
+                "Market context is weak. " +
+                "Prioritise capital protection and confirmation. " +
+                "Prefer stocks with strong relative strength, " +
+                "volume confirmation and valid risk/reward. " +
+                "Avoid chasing breakdowns or weak breakouts."
+            );
+
+        }
+
+
+        if (
+            regime.includes("bull") &&
+            (
+                niftyTrend.includes("positive") ||
+                niftyTrend.includes("bull")
+            )
+        ) {
+
+            return (
+                "Market structure is supportive. " +
+                "Prefer stocks above key moving averages " +
+                "with positive momentum and volume confirmation. " +
+                "Breakouts are more actionable when price sustains above the trigger."
+            );
+
+        }
+
+
+        return (
+            "Market conditions are mixed. " +
+            "Wait for price and volume confirmation around important levels. " +
+            "Use the stock-level trade plan and invalidation level rather than relying on score alone."
+        );
+
+    }
+
+
+    /* =====================================================
+       BREADTH
+    ===================================================== */
+
+    function renderBreadth() {
+
+        const container =
+            $("breadthCards");
+
+        if (!container) return;
+
+
+        const breadth =
+            getBreadthObject();
+
+
+        const stocks =
+            number(
+                first(
+                    breadth,
+                    [
+                        "stocks_analyzed",
+                        "Stocks_Analyzed",
+                        "total_stocks",
+                        "Total_Stocks"
+                    ]
+                )
+            );
+
+
+        const above20 =
+            number(
+                first(
+                    breadth,
+                    [
+                        "above_20_dma",
+                        "Above_20_DMA"
+                    ]
+                )
+            );
+
+
+        const above50 =
+            number(
+                first(
+                    breadth,
+                    [
+                        "above_50_dma",
+                        "Above_50_DMA"
+                    ]
+                )
+            );
+
+
+        const above200 =
+            number(
+                first(
+                    breadth,
+                    [
+                        "above_200_dma",
+                        "Above_200_DMA"
+                    ]
+                )
+            );
+
+
+        const highs =
+            number(
+                first(
+                    breadth,
+                    [
+                        "52w_highs",
+                        "52W_Highs",
+                        "highs"
+                    ]
+                )
+            );
+
+
+        const lows =
+            number(
+                first(
+                    breadth,
+                    [
+                        "52w_lows",
+                        "52W_Lows",
+                        "lows"
+                    ]
+                )
+            );
+
+
+        const scoreValue =
+            number(
+                first(
+                    breadth,
+                    [
+                        "breadth_score",
+                        "Breadth_Score",
+                        "score",
+                        "Score"
+                    ]
+                )
+            );
+
+
+        const regime =
+            first(
+                breadth,
+                [
+                    "breadth_regime",
+                    "Breadth_Regime",
+                    "regime"
+                ]
+            );
+
+
+        const cards = [
+
+            [
+                "Stocks Analysed",
+                stocks,
+                "NSE equity universe"
+            ],
+
+            [
+                "Above 20 DMA",
+                above20,
+                percentageOf(
+                    above20,
+                    stocks
+                )
+            ],
+
+            [
+                "Above 50 DMA",
+                above50,
+                percentageOf(
+                    above50,
+                    stocks
+                )
+            ],
+
+            [
+                "Above 200 DMA",
+                above200,
+                percentageOf(
+                    above200,
+                    stocks
+                )
+            ],
+
+            [
+                "52W Highs",
+                highs,
+                "Rolling 52-week"
+            ],
+
+            [
+                "52W Lows",
+                lows,
+                "Rolling 52-week"
+            ]
+
+        ];
+
+
+        container.innerHTML =
+            cards
+                .map(
+                    ([label, value, sub]) => `
+
+                        <div class="breadth-card">
+
+                            <div class="breadth-label">
+                                ${label}
+                            </div>
+
+                            <div class="breadth-value">
+                                ${
+                                    value === null
+                                        ? "—"
+                                        : formatNumber(
+                                            value,
+                                            0
+                                        )
+                                }
+                            </div>
+
+                            <div class="breadth-sub">
+                                ${escapeHTML(
+                                    text(sub)
+                                )}
+                            </div>
+
+                        </div>
+
+                    `
+                )
+                .join("");
+
+
+        if (regime) {
+
+            container.insertAdjacentHTML(
+                "beforeend",
+                `
+                <div class="breadth-card">
+
+                    <div class="breadth-label">
+                        Breadth Regime
+                    </div>
+
+                    <div class="breadth-value">
+                        ${escapeHTML(
+                            String(regime)
+                        )}
+                    </div>
+
+                    <div class="breadth-sub">
+                        Score:
+                        ${
+                            scoreValue === null
+                                ? "—"
+                                : scoreValue.toFixed(2)
+                        }
+                    </div>
+
+                </div>
+                `
+            );
+
+        }
+
+    }
+
+
+    function percentageOf(part, total) {
+
+        if (
+            part === null ||
+            total === null ||
+            total === 0
+        ) {
+
+            return "—";
+
+        }
+
+        return (
+            (part / total) * 100
+        ).toFixed(1) + "%";
+
+    }
+
+
+    /* =====================================================
+       SECTORS
+    ===================================================== */
+
+    function renderSectors() {
+
+        const table =
+            $("sectorTable");
+
+        if (!table) return;
+
+
+        const tbody =
+            table.querySelector("tbody");
+
+
+        if (!tbody) return;
+
+
+        const sectors =
+            getSectorData();
+
+
+        if (!sectors.length) {
+
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="empty-state">
+                        Sector data unavailable.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        const normalized =
+            sectors
+                .map(row => {
+
+                    const s = {...row};
+
+
+                    s.name =
+                        text(
+                            first(
+                                s,
+                                [
+                                    "sector",
+                                    "Sector",
+                                    "sector_name",
+                                    "Sector_Name",
+                                    "name",
+                                    "Index"
+                                ]
+                            )
+                        );
+
+
+                    s.price =
+                        number(
+                            first(
+                                s,
+                                [
+                                    "price",
+                                    "Price",
+                                    "Close",
+                                    "close"
+                                ]
+                            )
+                        );
+
+
+                    s.trend =
+                        text(
+                            first(
+                                s,
+                                [
+                                    "trend",
+                                    "Trend"
+                                ]
+                            )
+                        );
+
+
+                    s.momentum =
+                        text(
+                            first(
+                                s,
+                                [
+                                    "momentum",
+                                    "Momentum"
+                                ]
+                            )
+                        );
+
+
+                    s.return20 =
+                        number(
+                            first(
+                                s,
+                                [
+                                    "return_20d",
+                                    "20D_Return",
+                                    "20D_Return_Pct",
+                                    "return_20d_pct",
+                                    "performance_20d"
+                                ]
+                            )
+                        );
+
+
+                    s.score =
+                        number(
+                            first(
+                                s,
+                                [
+                                    "score",
+                                    "Score",
+                                    "sector_score",
+                                    "Sector_Score"
+                                ]
+                            )
+                        );
+
+
+                    return s;
+
+                })
+                .sort(
+                    (a,b) =>
+                        (b.score || 0) -
+                        (a.score || 0)
+                );
+
+
+        tbody.innerHTML =
+            normalized
+                .map(
+                    (s,index) => `
+
+                    <tr>
+
+                        <td>
+                            ${index + 1}
+                        </td>
+
+                        <td>
+                            <strong>
+                                ${escapeHTML(s.name)}
+                            </strong>
+                        </td>
+
+                        <td>
+                            ${
+                                s.price === null
+                                    ? "—"
+                                    : formatPrice(s.price)
+                            }
+                        </td>
+
+                        <td class="${valueClass(s.trend)}">
+                            ${escapeHTML(
+                                s.trend
+                            )}
+                        </td>
+
+                        <td class="${valueClass(s.momentum)}">
+                            ${escapeHTML(
+                                s.momentum
+                            )}
+                        </td>
+
+                        <td class="${
+                            s.return20 > 0
+                                ? "positive"
+                                : s.return20 < 0
+                                    ? "negative"
+                                    : "neutral"
+                        }">
+                            ${
+                                s.return20 === null
+                                    ? "—"
+                                    : formatPercent(
+                                        s.return20
+                                    )
+                            }
+                        </td>
+
+                        <td>
+                            <strong>
+                                ${
+                                    s.score === null
+                                        ? "—"
+                                        : s.score.toFixed(1)
+                                }
+                            </strong>
+                        </td>
+
+                        <td>
+                            <span class="status-badge ${
+                                valueClass(s.trend)
+                            }">
+                                View
+                            </span>
+                        </td>
+
+                    </tr>
+
+                `
+                )
+                .join("");
+
+    }
+
+
+    /* =====================================================
+       SETUP SUMMARY
+    ===================================================== */
+
+    function renderSetupSummary() {
+
+        const counts =
+            dashboardData.watchlist_counts ||
+            dashboardData.watchlists_counts ||
+            dashboardData.setup_counts ||
+            {};
+
+
+        const count =
+            key => {
 
                 if (
-                    stock ||
-                    !Array.isArray(list)
+                    counts[key] !== undefined
                 ) {
-                    return;
-                }
 
-
-                const found =
-                    list.find(
-                        item =>
-                            String(
-                                item.symbol ||
-                                item.nse_symbol ||
-                                ""
-                            ).toUpperCase()
-                            ===
-                            String(
-                                symbol
-                            ).toUpperCase()
+                    return number(
+                        counts[key]
                     );
 
-
-                if (found) {
-                    stock = found;
                 }
+
+
+                return (
+                    watchlists[key]?.length || 0
+                );
+
+            };
+
+
+        const mappings = {
+
+            summary52wHigh: "52w_high",
+
+            summaryDmaRecovery: "dma_recovery",
+
+            summaryMomentum: "momentum",
+
+            summaryBreakout: "breakout",
+
+            summaryNextDay: "next_day",
+
+            summaryOptions: "options"
+
+        };
+
+
+        Object.entries(mappings)
+            .forEach(
+                ([elementId,key]) => {
+
+                    const el =
+                        $(elementId);
+
+                    if (!el) return;
+
+                    el.textContent =
+                        count(key);
+
+                }
+            );
+
+
+        const cards =
+            document.querySelectorAll(
+                ".summary-card"
+            );
+
+
+        const mappingKeys = [
+            "52w_high",
+            "dma_recovery",
+            "momentum",
+            "breakout",
+            "next_day",
+            "options"
+        ];
+
+
+        cards.forEach(
+            (card,index) => {
+
+                const key =
+                    mappingKeys[index];
+
+                if (!key) return;
+
+
+                card.onclick = () => {
+
+                    switchWatchlist(
+                        key
+                    );
+
+                    document
+                        .getElementById(
+                            "watchlistSection"
+                        )
+                        ?.scrollIntoView({
+                            behavior:"smooth",
+                            block:"start"
+                        });
+
+                };
 
             }
         );
@@ -2196,164 +2560,1564 @@ function openStockDetail(
     }
 
 
-    if (!stock) {
+    /* =====================================================
+       WATCHLIST TABS
+    ===================================================== */
 
-        console.warn(
-            "Stock not found:",
-            symbol
-        );
+    function initializeWatchlistTabs() {
 
-        return;
-
-    }
-
-
-    const modal =
-        document.getElementById(
-            "stockModal"
-        );
+        const tabs =
+            document.querySelectorAll(
+                ".watchlist-tab"
+            );
 
 
-    const detail =
-        document.getElementById(
-            "stockDetail"
-        );
+        tabs.forEach(
+            tab => {
 
+                tab.addEventListener(
+                    "click",
+                    () => {
 
-    if (
-        !modal ||
-        !detail
-    ) {
-        return;
-    }
+                        const key =
+                            tab.dataset.watchlist;
 
+                        if (!key) return;
 
-    detail.innerHTML =
-        buildStockDetail(
-            stock
-        );
+                        switchWatchlist(
+                            key
+                        );
 
+                    }
+                );
 
-    modal.classList.add(
-        "open"
-    );
-
-
-    modal.classList.add(
-        "active"
-    );
-
-
-    modal.setAttribute(
-        "aria-hidden",
-        "false"
-    );
-
-
-    document.body.classList.add(
-        "modal-open"
-    );
-
-}
-
-
-window.openStockDetail =
-    openStockDetail;
-
-
-function closeStockModal() {
-
-    const modal =
-        document.getElementById(
-            "stockModal"
-        );
-
-
-    if (!modal) {
-        return;
-    }
-
-
-    modal.classList.remove(
-        "open"
-    );
-
-
-    modal.classList.remove(
-        "active"
-    );
-
-
-    modal.setAttribute(
-        "aria-hidden",
-        "true"
-    );
-
-
-    document.body.classList.remove(
-        "modal-open"
-    );
-
-}
-
-
-window.closeStockModal =
-    closeStockModal;
-
-
-// ============================================================
-// MODAL EVENTS
-// ============================================================
-
-function bindModalEvents() {
-
-    const closeButton =
-        document.getElementById(
-            "stockModalClose"
-        );
-
-
-    if (
-        closeButton &&
-        closeButton.dataset.bound !==
-        "true"
-    ) {
-
-        closeButton.dataset.bound =
-            "true";
-
-
-        closeButton.addEventListener(
-            "click",
-            closeStockModal
+            }
         );
 
     }
 
 
-    const modal =
-        document.getElementById(
-            "stockModal"
+    function switchWatchlist(key) {
+
+        if (!WATCHLIST_META[key]) {
+
+            key = "next_day";
+
+        }
+
+
+        currentWatchlist = key;
+
+
+        document
+            .querySelectorAll(
+                ".watchlist-tab"
+            )
+            .forEach(
+                tab => {
+
+                    tab.classList.toggle(
+                        "active",
+                        tab.dataset.watchlist === key
+                    );
+
+                }
+            );
+
+
+        currentWatchlistData =
+            Array.isArray(
+                watchlists[key]
+            )
+                ? watchlists[key]
+                : [];
+
+
+        populateSetupFilter(
+            currentWatchlistData
         );
 
 
-    if (
-        modal &&
-        modal.dataset.bound !==
-        "true"
-    ) {
+        renderWatchlist();
 
-        modal.dataset.bound =
-            "true";
+    }
 
 
-        modal.addEventListener(
-            "click",
+    function populateSetupFilter(stocks) {
+
+        const select =
+            $("setupFilter");
+
+        if (!select) return;
+
+
+        const current =
+            select.value;
+
+
+        const setups =
+            [...new Set(
+                stocks
+                    .map(
+                        stock =>
+                            stock.setup
+                    )
+                    .filter(
+                        value =>
+                            value &&
+                            value !== "—"
+                    )
+            )]
+            .sort();
+
+
+        select.innerHTML =
+            `<option value="">
+                All setups
+             </option>`;
+
+
+        setups.forEach(
+            setup => {
+
+                const option =
+                    document.createElement(
+                        "option"
+                    );
+
+                option.value =
+                    setup;
+
+                option.textContent =
+                    setup;
+
+                select.appendChild(
+                    option
+                );
+
+            }
+        );
+
+
+        if (
+            setups.includes(current)
+        ) {
+
+            select.value =
+                current;
+
+        }
+
+    }
+
+
+    function initializeWatchlistControls() {
+
+        const search =
+            $("stockSearch");
+
+        const setup =
+            $("setupFilter");
+
+
+        if (search) {
+
+            search.addEventListener(
+                "input",
+                renderWatchlist
+            );
+
+        }
+
+
+        if (setup) {
+
+            setup.addEventListener(
+                "change",
+                renderWatchlist
+            );
+
+        }
+
+
+        const download =
+            $("downloadWatchlist");
+
+
+        if (download) {
+
+            download.addEventListener(
+                "click",
+                exportCurrentWatchlist
+            );
+
+        }
+
+    }
+
+
+    /* =====================================================
+       WATCHLIST RENDER
+    ===================================================== */
+
+    function renderWatchlist() {
+
+        const table =
+            $("stockTable");
+
+        if (!table) return;
+
+
+        const tbody =
+            table.querySelector(
+                "tbody"
+            );
+
+
+        if (!tbody) return;
+
+
+        let stocks =
+            Array.isArray(
+                currentWatchlistData
+            )
+                ? [...currentWatchlistData]
+                : [];
+
+
+        const search =
+            String(
+                $("stockSearch")?.value || ""
+            )
+            .trim()
+            .toLowerCase();
+
+
+        const setup =
+            $("setupFilter")?.value || "";
+
+
+        if (search) {
+
+            stocks =
+                stocks.filter(
+                    stock =>
+                        stock.symbol
+                            .toLowerCase()
+                            .includes(search) ||
+
+                        stock.company_name
+                            .toLowerCase()
+                            .includes(search)
+                );
+
+        }
+
+
+        if (setup) {
+
+            stocks =
+                stocks.filter(
+                    stock =>
+                        stock.setup === setup
+                );
+
+        }
+
+
+        currentFilteredData =
+            stocks;
+
+
+        const total =
+            currentWatchlistData.length;
+
+
+        if ($("watchlistTitle")) {
+
+            $("watchlistTitle").textContent =
+                WATCHLIST_META[
+                    currentWatchlist
+                ].title;
+
+        }
+
+
+        if ($("watchlistCount")) {
+
+            $("watchlistCount").textContent =
+                `${total} stocks`;
+
+        }
+
+
+        if ($("watchlistTableNote")) {
+
+            $("watchlistTableNote").textContent =
+                search || setup
+                    ? `Showing ${Math.min(
+                        stocks.length,
+                        TOP_ROWS
+                    )} filtered results.`
+                    : `Showing top ${Math.min(
+                        stocks.length,
+                        TOP_ROWS
+                    )} opportunities. Click any stock for complete analysis.`;
+
+        }
+
+
+        if (!stocks.length) {
+
+            tbody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="17"
+                        class="empty-state"
+                    >
+                        No stocks found in this watchlist.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        const display =
+            stocks.slice(
+                0,
+                TOP_ROWS
+            );
+
+
+        tbody.innerHTML =
+            display
+                .map(
+                    (stock,index) =>
+                        stockRowHTML(
+                            stock,
+                            index + 1
+                        )
+                )
+                .join("");
+
+
+        attachStockRowEvents(
+            tbody
+        );
+
+    }
+
+
+    function setupClass(setup) {
+
+        const s =
+            String(setup || "")
+                .toLowerCase();
+
+
+        if (
+            s.includes("strong") ||
+            s.includes("confirmed")
+        ) {
+
+            return "setup-positive";
+
+        }
+
+
+        if (
+            s.includes("possible") ||
+            s.includes("pre-") ||
+            s.includes("watch")
+        ) {
+
+            return "setup-watch";
+
+        }
+
+
+        if (
+            s.includes("weak") ||
+            s.includes("avoid")
+        ) {
+
+            return "setup-negative";
+
+        }
+
+
+        return "setup-neutral";
+
+    }
+
+
+    function stockRowHTML(stock,index) {
+
+        const price =
+            stock.price;
+
+
+        return `
+
+            <tr class="stock-row">
+
+                <td>
+                    ${index}
+                </td>
+
+                <td>
+                    <span
+                        class="stock-symbol"
+                        data-symbol="${escapeHTML(
+                            stock.symbol
+                        )}"
+                    >
+                        ${escapeHTML(
+                            stock.symbol
+                        )}
+                    </span>
+                </td>
+
+                <td class="stock-company"
+                    title="${escapeHTML(
+                        stock.company_name
+                    )}">
+                    ${escapeHTML(
+                        stock.company_name
+                    )}
+                </td>
+
+                <td>
+                    ${
+                        price === null
+                            ? "—"
+                            : formatPrice(price)
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.sma200 === null
+                            ? "—"
+                            : formatPrice(
+                                stock.sma200
+                            )
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.high52 === null
+                            ? "—"
+                            : formatPrice(
+                                stock.high52
+                            )
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.rsi === null
+                            ? "—"
+                            : stock.rsi.toFixed(1)
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.volume_ratio === null
+                            ? "—"
+                            : stock.volume_ratio.toFixed(2) + "x"
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.technical_score === null
+                            ? "—"
+                            : stock.technical_score.toFixed(1)
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.fundamental_score === null
+                            ? "—"
+                            : stock.fundamental_score.toFixed(1)
+                    }
+                </td>
+
+                <td>
+                    <strong>
+                        ${
+                            stock.overall_score === null
+                                ? "—"
+                                : stock.overall_score.toFixed(1)
+                        }
+                    </strong>
+                </td>
+
+                <td>
+                    <span
+                        class="setup-badge ${
+                            setupClass(
+                                stock.setup
+                            )
+                        }"
+                    >
+                        ${escapeHTML(
+                            stock.setup
+                        )}
+                    </span>
+                </td>
+
+                <td class="trade-entry">
+                    ${
+                        stock.entry === null
+                            ? "—"
+                            : formatPrice(
+                                stock.entry
+                            )
+                    }
+                </td>
+
+                <td class="trade-stop">
+                    ${
+                        stock.stop === null
+                            ? "—"
+                            : formatPrice(
+                                stock.stop
+                            )
+                    }
+                </td>
+
+                <td class="trade-target">
+                    ${
+                        stock.target1 === null
+                            ? "—"
+                            : formatPrice(
+                                stock.target1
+                            )
+                    }
+                </td>
+
+                <td class="trade-target">
+                    ${
+                        stock.target2 === null
+                            ? "—"
+                            : formatPrice(
+                                stock.target2
+                            )
+                    }
+                </td>
+
+                <td>
+                    ${
+                        stock.rr === null
+                            ? "—"
+                            : stock.rr.toFixed(2) + "x"
+                    }
+                </td>
+
+            </tr>
+
+        `;
+
+    }
+
+
+    function attachStockRowEvents(container) {
+
+        container
+            .querySelectorAll(
+                ".stock-symbol"
+            )
+            .forEach(
+                element => {
+
+                    element.addEventListener(
+                        "click",
+                        event => {
+
+                            event.stopPropagation();
+
+                            openStockDetail(
+                                element.dataset.symbol
+                            );
+
+                        }
+                    );
+
+                }
+            );
+
+    }
+
+
+    /* =====================================================
+       COMPLETE STOCK SCANNER
+    ===================================================== */
+
+    function renderAllStocks() {
+
+        const tbody =
+            $("allStocksTable");
+
+        if (!tbody) return;
+
+
+        const search =
+            String(
+                $("allStockSearch")?.value || ""
+            )
+            .trim()
+            .toLowerCase();
+
+
+        const setup =
+            $("allSetupFilter")?.value || "";
+
+
+        let stocks =
+            [...allStocks];
+
+
+        if (search) {
+
+            stocks =
+                stocks.filter(
+                    stock =>
+                        stock.symbol
+                            .toLowerCase()
+                            .includes(search) ||
+
+                        stock.company_name
+                            .toLowerCase()
+                            .includes(search)
+                );
+
+        }
+
+
+        if (setup) {
+
+            stocks =
+                stocks.filter(
+                    stock =>
+                        stock.setup === setup
+                );
+
+        }
+
+
+        if ($("allStocksCount")) {
+
+            $("allStocksCount").textContent =
+                `${stocks.length} stocks`;
+
+        }
+
+
+        if (!stocks.length) {
+
+            tbody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="12"
+                        class="empty-state"
+                    >
+                        No stocks found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        tbody.innerHTML =
+            stocks
+                .slice(0,300)
+                .map(
+                    (stock,index) => `
+
+                    <tr>
+
+                        <td>
+                            ${index + 1}
+                        </td>
+
+                        <td>
+                            <span
+                                class="stock-symbol"
+                                data-symbol="${escapeHTML(
+                                    stock.symbol
+                                )}"
+                            >
+                                ${escapeHTML(
+                                    stock.symbol
+                                )}
+                            </span>
+                        </td>
+
+                        <td class="stock-company">
+                            ${escapeHTML(
+                                stock.company_name
+                            )}
+                        </td>
+
+                        <td>
+                            ${
+                                stock.price === null
+                                    ? "—"
+                                    : formatPrice(
+                                        stock.price
+                                    )
+                            }
+                        </td>
+
+                        <td>
+                            ${
+                                stock.sma200 === null
+                                    ? "—"
+                                    : formatPrice(
+                                        stock.sma200
+                                    )
+                            }
+                        </td>
+
+                        <td>
+                            ${
+                                stock.high52 === null
+                                    ? "—"
+                                    : formatPrice(
+                                        stock.high52
+                                    )
+                            }
+                        </td>
+
+                        <td>
+                            ${
+                                stock.rsi === null
+                                    ? "—"
+                                    : stock.rsi.toFixed(1)
+                            }
+                        </td>
+
+                        <td class="${valueClass(
+                            stock.trend
+                        )}">
+                            ${escapeHTML(
+                                stock.trend
+                            )}
+                        </td>
+
+                        <td>
+                            ${
+                                stock.technical_score === null
+                                    ? "—"
+                                    : stock.technical_score.toFixed(1)
+                            }
+                        </td>
+
+                        <td>
+                            ${
+                                stock.fundamental_score === null
+                                    ? "—"
+                                    : stock.fundamental_score.toFixed(1)
+                            }
+                        </td>
+
+                        <td>
+                            <strong>
+                                ${
+                                    stock.overall_score === null
+                                        ? "—"
+                                        : stock.overall_score.toFixed(1)
+                                }
+                            </strong>
+                        </td>
+
+                        <td>
+                            <span
+                                class="setup-badge ${
+                                    setupClass(
+                                        stock.setup
+                                    )
+                                }"
+                            >
+                                ${escapeHTML(
+                                    stock.setup
+                                )}
+                            </span>
+                        </td>
+
+                    </tr>
+
+                `
+                )
+                .join("");
+
+
+        attachStockRowEvents(
+            tbody
+        );
+
+    }
+
+
+    function initializeAllStockControls() {
+
+        const search =
+            $("allStockSearch");
+
+
+        if (search) {
+
+            search.addEventListener(
+                "input",
+                renderAllStocks
+            );
+
+        }
+
+
+        const filter =
+            $("allSetupFilter");
+
+
+        if (filter) {
+
+            const setups =
+                [...new Set(
+                    allStocks
+                        .map(
+                            stock =>
+                                stock.setup
+                        )
+                        .filter(
+                            value =>
+                                value &&
+                                value !== "—"
+                        )
+                )]
+                .sort();
+
+
+            setups.forEach(
+                setup => {
+
+                    const option =
+                        document.createElement(
+                            "option"
+                        );
+
+                    option.value =
+                        setup;
+
+                    option.textContent =
+                        setup;
+
+                    filter.appendChild(
+                        option
+                    );
+
+                }
+            );
+
+
+            filter.addEventListener(
+                "change",
+                renderAllStocks
+            );
+
+        }
+
+    }
+
+
+    /* =====================================================
+       STOCK DETAIL
+    ===================================================== */
+
+    function findStock(symbol) {
+
+        const target =
+            String(symbol || "")
+                .replace(".NS","")
+                .toUpperCase();
+
+
+        let stock =
+            allStocks.find(
+                item =>
+                    item.symbol.toUpperCase() ===
+                    target
+            );
+
+
+        if (stock) return stock;
+
+
+        for (const list of Object.values(
+            watchlists
+        )) {
+
+            stock =
+                list.find(
+                    item =>
+                        item.symbol.toUpperCase() ===
+                        target
+                );
+
+
+            if (stock) return stock;
+
+        }
+
+
+        return null;
+
+    }
+
+
+    function openStockDetail(symbol) {
+
+        const stock =
+            findStock(symbol);
+
+
+        const modal =
+            $("stockModal");
+
+
+        const detail =
+            $("stockDetail");
+
+
+        if (!modal || !detail) return;
+
+
+        if (!stock) {
+
+            detail.innerHTML = `
+                <div class="error-state">
+                    Stock analysis unavailable.
+                </div>
+            `;
+
+        } else {
+
+            detail.innerHTML =
+                stockDetailHTML(
+                    stock
+                );
+
+        }
+
+
+        modal.classList.add("open");
+
+        modal.classList.add("active");
+
+        modal.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+
+        document.body.style.overflow =
+            "hidden";
+
+    }
+
+
+    function closeStockModal() {
+
+        const modal =
+            $("stockModal");
+
+
+        if (!modal) return;
+
+
+        modal.classList.remove(
+            "open",
+            "active"
+        );
+
+
+        modal.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+
+        document.body.style.overflow =
+            "";
+
+    }
+
+
+    function stockDetailHTML(stock) {
+
+        const price =
+            stock.price;
+
+
+        const priceVs200 =
+            price !== null &&
+            stock.sma200 !== null
+                ?
+                    (
+                        (
+                            price /
+                            stock.sma200
+                        ) - 1
+                    ) * 100
+                :
+                    null;
+
+
+        const distanceHigh =
+            price !== null &&
+            stock.high52 !== null
+                ?
+                    (
+                        (
+                            price /
+                            stock.high52
+                        ) - 1
+                    ) * 100
+                :
+                    null;
+
+
+        return `
+
+            <div class="stock-detail-header">
+
+                <div>
+
+                    <div class="detail-symbol">
+                        ${escapeHTML(
+                            stock.symbol
+                        )}
+                    </div>
+
+                    <div class="detail-company">
+                        ${escapeHTML(
+                            stock.company_name
+                        )}
+                    </div>
+
+                    <div style="margin-top:10px">
+
+                        <span class="setup-badge ${
+                            setupClass(
+                                stock.setup
+                            )
+                        }">
+                            ${escapeHTML(
+                                stock.setup
+                            )}
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div class="detail-rating">
+
+                    Overall Score:
+                    <strong>
+                        ${
+                            stock.overall_score === null
+                                ? "—"
+                                : stock.overall_score.toFixed(1)
+                        }
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="detail-grid">
+
+                ${detailItem(
+                    "LTP / Last Close",
+                    formatPrice(price)
+                )}
+
+                ${detailItem(
+                    "Daily Change",
+                    formatPercent(
+                        stock.daily_return_pct
+                    )
+                )}
+
+                ${detailItem(
+                    "200 DMA",
+                    formatPrice(
+                        stock.sma200
+                    )
+                )}
+
+                ${detailItem(
+                    "Distance vs 200 DMA",
+                    formatPercent(
+                        priceVs200
+                    )
+                )}
+
+                ${detailItem(
+                    "52W High",
+                    formatPrice(
+                        stock.high52
+                    )
+                )}
+
+                ${detailItem(
+                    "Distance from 52W High",
+                    formatPercent(
+                        distanceHigh
+                    )
+                )}
+
+                ${detailItem(
+                    "RSI",
+                    stock.rsi === null
+                        ? "—"
+                        : stock.rsi.toFixed(1)
+                )}
+
+                ${detailItem(
+                    "Volume Ratio",
+                    stock.volume_ratio === null
+                        ? "—"
+                        : stock.volume_ratio.toFixed(2) + "x"
+                )}
+
+                ${detailItem(
+                    "Trend",
+                    stock.trend
+                )}
+
+                ${detailItem(
+                    "Momentum",
+                    stock.momentum
+                )}
+
+                ${detailItem(
+                    "Technical Score",
+                    stock.technical_score === null
+                        ? "—"
+                        : stock.technical_score.toFixed(1)
+                )}
+
+                ${detailItem(
+                    "Fundamental Score",
+                    stock.fundamental_score === null
+                        ? "—"
+                        : stock.fundamental_score.toFixed(1)
+                )}
+
+            </div>
+
+
+            ${tradePlanHTML(stock)}
+
+
+            <div class="detail-section">
+
+                <h3>
+                    Why is this stock on the watchlist?
+                </h3>
+
+                <p>
+                    ${escapeHTML(
+                        stock.plan_reason !== "—"
+                            ? stock.plan_reason
+                            : generateStockReason(
+                                stock
+                            )
+                    )}
+                </p>
+
+            </div>
+
+
+            <div class="detail-section">
+
+                <h3>
+                    Decision Framework
+                </h3>
+
+                <p>
+                    ${
+                        generateDecisionText(
+                            stock
+                        )
+                    }
+                </p>
+
+            </div>
+
+
+            <div class="detail-section">
+
+                <h3>
+                    Invalidation / Risk
+                </h3>
+
+                <p>
+                    ${escapeHTML(
+                        stock.invalidation !== "—"
+                            ? stock.invalidation
+                            : (
+                                stock.stop !== null
+                                    ?
+                                    "Trade thesis weakens below the calculated stop-loss."
+                                    :
+                                    "No engine-generated trade plan is currently available."
+                            )
+                    )}
+                </p>
+
+            </div>
+
+        `;
+
+    }
+
+
+    function detailItem(label,value) {
+
+        return `
+
+            <div class="detail-item">
+
+                <span>
+                    ${escapeHTML(label)}
+                </span>
+
+                <b>
+                    ${escapeHTML(
+                        text(value)
+                    )}
+                </b>
+
+            </div>
+
+        `;
+
+    }
+
+
+    function tradePlanHTML(stock) {
+
+        if (
+            stock.entry === null &&
+            stock.stop === null &&
+            stock.target1 === null
+        ) {
+
+            return `
+
+                <div class="trade-plan-panel">
+
+                    <div class="trade-plan-header">
+
+                        <div class="trade-plan-label">
+                            Trade Plan
+                        </div>
+
+                        <div class="trade-plan-status neutral">
+                            Confirmation Required
+                        </div>
+
+                    </div>
+
+                    <div class="trade-plan-reason">
+                        The ranking engine has not generated
+                        a complete actionable trade plan for
+                        this stock.
+                    </div>
+
+                </div>
+
+            `;
+
+        }
+
+
+        return `
+
+            <div class="trade-plan-panel">
+
+                <div class="trade-plan-header">
+
+                    <div class="trade-plan-label">
+                        Engine-Generated Trade Plan
+                    </div>
+
+                    <div class="trade-plan-status ${
+                        setupClass(
+                            stock.setup
+                        )
+                    }">
+                        ${escapeHTML(
+                            stock.plan_status !== "—"
+                                ? stock.plan_status
+                                : stock.trade_quality
+                        )}
+                    </div>
+
+                </div>
+
+
+                <div class="trade-plan-grid">
+
+                    ${detailItem(
+                        "Entry",
+                        stock.entry === null
+                            ? (
+                                stock.entry_low !== null &&
+                                stock.entry_high !== null
+                                    ?
+                                    `${formatPrice(stock.entry_low)} – ${formatPrice(stock.entry_high)}`
+                                    :
+                                    "—"
+                            )
+                            :
+                            formatPrice(
+                                stock.entry
+                            )
+                    )}
+
+                    ${detailItem(
+                        "Stop Loss",
+                        formatPrice(
+                            stock.stop
+                        )
+                    )}
+
+                    ${detailItem(
+                        "Target 1",
+                        formatPrice(
+                            stock.target1
+                        )
+                    )}
+
+                    ${detailItem(
+                        "Target 2",
+                        formatPrice(
+                            stock.target2
+                        )
+                    )}
+
+                    ${detailItem(
+                        "Risk / Reward",
+                        stock.rr === null
+                            ? "—"
+                            : stock.rr.toFixed(2) + "x"
+                    )}
+
+                </div>
+
+
+                ${
+                    stock.plan_reason !== "—"
+                        ?
+                        `<div class="trade-plan-reason">
+                            <strong>Reason:</strong>
+                            ${escapeHTML(
+                                stock.plan_reason
+                            )}
+                        </div>`
+                        :
+                        ""
+                }
+
+            </div>
+
+        `;
+
+    }
+
+
+    function generateStockReason(stock) {
+
+        const reasons = [];
+
+
+        if (
+            stock.price !== null &&
+            stock.sma200 !== null &&
+            stock.price > stock.sma200
+        ) {
+
+            reasons.push(
+                "price is above the 200 DMA"
+            );
+
+        }
+
+
+        if (
+            stock.rsi !== null &&
+            stock.rsi >= 50 &&
+            stock.rsi <= 70
+        ) {
+
+            reasons.push(
+                "RSI supports positive momentum without being extremely overbought"
+            );
+
+        }
+
+
+        if (
+            stock.volume_ratio !== null &&
+            stock.volume_ratio >= 1.2
+        ) {
+
+            reasons.push(
+                "volume is above normal"
+            );
+
+        }
+
+
+        if (
+            stock.overall_score !== null &&
+            stock.overall_score >= 60
+        ) {
+
+            reasons.push(
+                "overall ranking score is strong"
+            );
+
+        }
+
+
+        if (!reasons.length) {
+
+            return (
+                "The stock meets the ranking engine's " +
+                "current watchlist criteria."
+            );
+
+        }
+
+
+        return (
+            "The stock is being watched because " +
+            reasons.join(", ") +
+            "."
+        );
+
+    }
+
+
+    function generateDecisionText(stock) {
+
+        const score =
+            stock.overall_score;
+
+
+        const rr =
+            stock.rr;
+
+
+        if (
+            rr !== null &&
+            rr >= 2 &&
+            score !== null &&
+            score >= 65
+        ) {
+
+            return (
+                "This is a relatively strong setup. " +
+                "The preferred approach is to wait for the " +
+                "engine-defined entry/confirmation condition " +
+                "and maintain the calculated invalidation level."
+            );
+
+        }
+
+
+        if (
+            rr !== null &&
+            rr >= 1.5
+        ) {
+
+            return (
+                "The risk/reward is acceptable, but confirmation " +
+                "is still important. Do not chase price away from " +
+                "the calculated entry zone."
+            );
+
+        }
+
+
+        return (
+            "Treat this as a watch candidate rather than an automatic buy. " +
+            "Wait for confirmation and reassess the setup if price " +
+            "moves through the invalidation level."
+        );
+
+    }
+
+
+    /* =====================================================
+       MODAL EVENTS
+    ===================================================== */
+
+    function initializeModal() {
+
+        const close =
+            $("stockModalClose");
+
+
+        if (close) {
+
+            close.addEventListener(
+                "click",
+                closeStockModal
+            );
+
+        }
+
+
+        const overlay =
+            document.querySelector(
+                ".stock-modal-overlay"
+            );
+
+
+        if (overlay) {
+
+            overlay.addEventListener(
+                "click",
+                closeStockModal
+            );
+
+        }
+
+
+        document.addEventListener(
+            "keydown",
             event => {
 
                 if (
-                    event.target ===
-                    modal
+                    event.key === "Escape"
                 ) {
 
                     closeStockModal();
@@ -2365,2170 +4129,266 @@ function bindModalEvents() {
 
     }
 
-}
 
+    /* =====================================================
+       EXPORT
+    ===================================================== */
 
-document.addEventListener(
-    "keydown",
-    event => {
+    function exportCurrentWatchlist() {
 
-        if (
-            event.key ===
-            "Escape"
-        ) {
+        const stocks =
+            currentWatchlistData;
 
-            closeStockModal();
 
-        }
+        if (!stocks.length) {
 
-    }
-);
-
-
-// ============================================================
-// STOCK DETAIL CONTENT
-// ============================================================
-
-function buildStockDetail(
-    stock
-) {
-
-    const symbol =
-        stock.symbol ||
-        stock.nse_symbol ||
-        "-";
-
-
-    const company =
-        stock.company_name ||
-        symbol;
-
-
-    const entry =
-        tradeValue(
-            stock,
-            "entry_price"
-        );
-
-
-    const entryLow =
-        tradeValue(
-            stock,
-            "entry_low"
-        );
-
-
-    const entryHigh =
-        tradeValue(
-            stock,
-            "entry_high"
-        );
-
-
-    const stop =
-        tradeValue(
-            stock,
-            "stop_loss"
-        );
-
-
-    const target1 =
-        tradeValue(
-            stock,
-            "target_1"
-        );
-
-
-    const target2 =
-        tradeValue(
-            stock,
-            "target_2"
-        );
-
-
-    const rr1 =
-        firstValue(
-            stock.risk_reward_1,
-            stock.risk_reward
-        );
-
-
-    const rr2 =
-        stock.risk_reward_2;
-
-
-    const planStatus =
-        stock.trade_plan_status ||
-        "Unavailable";
-
-
-    const planType =
-        stock.trade_plan_type ||
-        "No active plan";
-
-
-    const planReason =
-        stock.trade_plan_reason ||
-        "";
-
-
-    const invalidation =
-        stock.invalidation ||
-        "";
-
-
-    const quality =
-        stock.trade_plan_quality ||
-        "";
-
-
-    return `
-
-        <div class="stock-detail-header">
-
-            <div>
-
-                <div class="section-kicker">
-                    Stock Intelligence
-                </div>
-
-                <h2>
-                    ${escapeHtml(
-                        symbol
-                    )}
-                </h2>
-
-                <p>
-                    ${escapeHtml(
-                        company
-                    )}
-                </p>
-
-            </div>
-
-
-            <div class="detail-rating">
-
-                <span>
-                    Overall Score
-                </span>
-
-                <strong>
-                    ${formatNumber(
-                        stock.overall_score
-                    )}
-                </strong>
-
-            </div>
-
-        </div>
-
-
-        ${renderTradePlan(
-            stock,
-            {
-                entry,
-                entryLow,
-                entryHigh,
-                stop,
-                target1,
-                target2,
-                rr1,
-                rr2,
-                planStatus,
-                planType,
-                planReason,
-                invalidation,
-                quality
-            }
-        )}
-
-
-        ${detailSection(
-            "Price & Trend",
-            [
-
-                detailItem(
-                    "Price",
-                    formatPrice(
-                        stock.price
-                    )
-                ),
-
-                detailItem(
-                    "Previous Close",
-                    formatPrice(
-                        stock.previous_close
-                    )
-                ),
-
-                detailItem(
-                    "Daily Change",
-                    formatSignedPercent(
-                        stock.daily_return_pct
-                    )
-                ),
-
-                detailItem(
-                    "Trend",
-                    stock.trend
-                ),
-
-                detailItem(
-                    "Momentum",
-                    stock.momentum
-                ),
-
-                detailItem(
-                    "Breakout",
-                    stock.breakout_status
-                ),
-
-                detailItem(
-                    "Setup",
-                    stock.setup
-                ),
-
-                detailItem(
-                    "Watchlist",
-                    findWatchlistMembership(
-                        symbol
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Technical Scores",
-            [
-
-                detailItem(
-                    "Technical Score",
-                    formatNumber(
-                        stock.technical_score
-                    )
-                ),
-
-                detailItem(
-                    "Fundamental Score",
-                    formatNumber(
-                        stock.fundamental_score
-                    )
-                ),
-
-                detailItem(
-                    "Sector Score",
-                    formatNumber(
-                        stock.sector_score
-                    )
-                ),
-
-                detailItem(
-                    "Overall Score",
-                    formatNumber(
-                        stock.overall_score
-                    )
-                ),
-
-                detailItem(
-                    "Technical Rating",
-                    stock.technical_rating
-                ),
-
-                detailItem(
-                    "Fundamental Status",
-                    stock.fundamental_status
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Moving Averages",
-            [
-
-                detailItem(
-                    "SMA 20",
-                    formatPrice(
-                        stock.sma20
-                    )
-                ),
-
-                detailItem(
-                    "SMA 50",
-                    formatPrice(
-                        stock.sma50
-                    )
-                ),
-
-                detailItem(
-                    "SMA 100",
-                    formatPrice(
-                        stock.sma100
-                    )
-                ),
-
-                detailItem(
-                    "SMA 200",
-                    formatPrice(
-                        stock.sma200
-                    )
-                ),
-
-                detailItem(
-                    "EMA 9",
-                    formatPrice(
-                        stock.ema9
-                    )
-                ),
-
-                detailItem(
-                    "EMA 20",
-                    formatPrice(
-                        stock.ema20
-                    )
-                ),
-
-                detailItem(
-                    "EMA 50",
-                    formatPrice(
-                        stock.ema50
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Momentum & Volatility",
-            [
-
-                detailItem(
-                    "RSI",
-                    formatNumber(
-                        stock.rsi14
-                    )
-                ),
-
-                detailItem(
-                    "ATR",
-                    formatPrice(
-                        stock.atr14
-                    )
-                ),
-
-                detailItem(
-                    "ATR %",
-                    formatPercent(
-                        stock.atr_pct
-                    )
-                ),
-
-                detailItem(
-                    "Volume",
-                    formatLargeNumber(
-                        stock.volume
-                    )
-                ),
-
-                detailItem(
-                    "Average Volume",
-                    formatLargeNumber(
-                        stock.avg_volume_20
-                    )
-                ),
-
-                detailItem(
-                    "Volume Ratio",
-                    isValidNumber(
-                        stock.volume_ratio
-                    )
-                        ? Number(
-                            stock.volume_ratio
-                        ).toFixed(2) + "x"
-                        : "—"
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "52W & 200 DMA Structure",
-            [
-
-                detailItem(
-                    "52W High",
-                    formatPrice(
-                        stock["52W_High"] ??
-                        stock["52w_high"]
-                    )
-                ),
-
-                detailItem(
-                    "52W Low",
-                    formatPrice(
-                        stock["52W_Low"] ??
-                        stock["52w_low"]
-                    )
-                ),
-
-                detailItem(
-                    "Distance from 52W High",
-                    formatPercent(
-                        stock.distance_from_52w_high_pct
-                    )
-                ),
-
-                detailItem(
-                    "Distance from 52W Low",
-                    formatPercent(
-                        stock.distance_from_52w_low_pct
-                    )
-                ),
-
-                detailItem(
-                    "200 DMA",
-                    formatPrice(
-                        stock.sma200
-                    )
-                ),
-
-                detailItem(
-                    "Distance from 200 DMA",
-                    formatPercent(
-                        stock.distance_from_200dma_pct
-                    )
-                ),
-
-                detailItem(
-                    "Above 200 DMA",
-                    formatBoolean(
-                        stock.above_200dma
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Support & Resistance",
-            [
-
-                detailItem(
-                    "Support",
-                    formatPrice(
-                        stock.support
-                    )
-                ),
-
-                detailItem(
-                    "Resistance",
-                    formatPrice(
-                        stock.resistance
-                    )
-                ),
-
-                detailItem(
-                    "Previous Support",
-                    formatPrice(
-                        stock.support_20
-                    )
-                ),
-
-                detailItem(
-                    "Previous Resistance",
-                    formatPrice(
-                        stock.resistance_20
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Company",
-            [
-
-                detailItem(
-                    "Company",
-                    stock.company_name
-                ),
-
-                detailItem(
-                    "Sector",
-                    stock.sector ||
-                    stock.primary_sector
-                ),
-
-                detailItem(
-                    "Industry",
-                    stock.industry
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Growth & Profitability",
-            [
-
-                detailItem(
-                    "Revenue",
-                    formatLargeNumber(
-                        stock.revenue
-                    )
-                ),
-
-                detailItem(
-                    "Revenue Growth",
-                    formatPercent(
-                        stock.revenue_growth
-                    )
-                ),
-
-                detailItem(
-                    "Revenue CAGR",
-                    formatPercent(
-                        firstValue(
-                            stock.revenue_cagr,
-                            stock.revenue_cagr_3y,
-                            stock.revenue_cagr_5y
-                        )
-                    )
-                ),
-
-                detailItem(
-                    "Net Income",
-                    formatLargeNumber(
-                        stock.net_income
-                    )
-                ),
-
-                detailItem(
-                    "Earnings Growth",
-                    formatPercent(
-                        stock.earnings_growth
-                    )
-                ),
-
-                detailItem(
-                    "Profit CAGR",
-                    formatPercent(
-                        firstValue(
-                            stock.profit_cagr,
-                            stock.profit_cagr_3y,
-                            stock.profit_cagr_5y
-                        )
-                    )
-                ),
-
-                detailItem(
-                    "EPS",
-                    formatNumber(
-                        stock.eps
-                    )
-                ),
-
-                detailItem(
-                    "EPS Growth",
-                    formatPercent(
-                        stock.eps_growth
-                    )
-                ),
-
-                detailItem(
-                    "EPS CAGR",
-                    formatPercent(
-                        firstValue(
-                            stock.eps_cagr,
-                            stock.eps_cagr_3y,
-                            stock.eps_cagr_5y
-                        )
-                    )
-                ),
-
-                detailItem(
-                    "Gross Margin",
-                    formatPercent(
-                        stock.gross_margin
-                    )
-                ),
-
-                detailItem(
-                    "Operating Margin",
-                    formatPercent(
-                        stock.operating_margin
-                    )
-                ),
-
-                detailItem(
-                    "Profit Margin",
-                    formatPercent(
-                        stock.profit_margin
-                    )
-                ),
-
-                detailItem(
-                    "EBITDA Margin",
-                    formatPercent(
-                        stock.ebitda_margin
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Returns & Balance Sheet",
-            [
-
-                detailItem(
-                    "ROE",
-                    formatPercent(
-                        stock.roe
-                    )
-                ),
-
-                detailItem(
-                    "ROCE",
-                    formatPercent(
-                        stock.roce
-                    )
-                ),
-
-                detailItem(
-                    "ROA",
-                    formatPercent(
-                        stock.roa
-                    )
-                ),
-
-                detailItem(
-                    "Debt / Equity",
-                    formatNumber(
-                        stock.debt_to_equity
-                    )
-                ),
-
-                detailItem(
-                    "Current Ratio",
-                    formatNumber(
-                        stock.current_ratio
-                    )
-                ),
-
-                detailItem(
-                    "Total Debt",
-                    formatLargeNumber(
-                        stock.total_debt
-                    )
-                ),
-
-                detailItem(
-                    "Cash",
-                    formatLargeNumber(
-                        stock.total_cash
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Valuation",
-            [
-
-                detailItem(
-                    "PE",
-                    formatNumber(
-                        stock.pe_ratio
-                    )
-                ),
-
-                detailItem(
-                    "Forward PE",
-                    formatNumber(
-                        stock.forward_pe
-                    )
-                ),
-
-                detailItem(
-                    "PB",
-                    formatNumber(
-                        stock.pb_ratio
-                    )
-                ),
-
-                detailItem(
-                    "PEG",
-                    formatNumber(
-                        stock.peg_ratio
-                    )
-                ),
-
-                detailItem(
-                    "Dividend Yield",
-                    formatPercent(
-                        stock.dividend_yield
-                    )
-                )
-
-            ]
-        )}
-
-
-        ${detailSection(
-            "Why This Stock Is On Watch",
-            [
-
-                detailItem(
-                    "Setup",
-                    stock.setup
-                ),
-
-                detailItem(
-                    "Technical Reason",
-                    stock.technical_reason ||
-                    stock.setup_reason
-                ),
-
-                detailItem(
-                    "Fundamental Quality",
-                    stock.fundamental_quality
-                ),
-
-                detailItem(
-                    "Sector",
-                    stock.primary_sector ||
-                    stock.sector
-                ),
-
-                detailItem(
-                    "Market Context",
-                    dashboardData.market?.regime
-                )
-
-            ]
-        )}
-
-    `;
-
-}
-
-
-// ============================================================
-// TRADE PLAN
-// ============================================================
-
-function renderTradePlan(
-    stock,
-    plan
-) {
-
-    const hasPlan =
-        isValidNumber(
-            plan.entry
-        )
-        &&
-        isValidNumber(
-            plan.stop
-        )
-        &&
-        isValidNumber(
-            plan.target1
-        );
-
-
-    if (!hasPlan) {
-
-        return `
-
-            <div class="trade-plan-panel">
-
-                <div class="trade-plan-header">
-
-                    <div>
-
-                        <div class="trade-plan-label">
-                            Trade Plan
-                        </div>
-
-                        <h3>
-                            No Active Trade Plan
-                        </h3>
-
-                    </div>
-
-                    <div class="trade-plan-status trade-plan-neutral">
-                        ${escapeHtml(
-                            plan.planStatus ||
-                            "Neutral / Unavailable"
-                        )}
-                    </div>
-
-                </div>
-
-                <div class="trade-plan-reason">
-
-                    Trade levels are not generated for
-                    weak or neutral setups.
-
-                </div>
-
-            </div>
-
-        `;
-
-    }
-
-
-    return `
-
-        <div class="trade-plan-panel">
-
-            <div class="trade-plan-header">
-
-                <div>
-
-                    <div class="trade-plan-label">
-                        Engine Generated Trade Plan
-                    </div>
-
-                    <h3>
-                        ${escapeHtml(
-                            plan.planType
-                        )}
-                    </h3>
-
-                </div>
-
-                <div class="trade-plan-status ${getTradePlanClass(
-                    plan.planStatus
-                )}">
-                    ${escapeHtml(
-                        plan.planStatus ||
-                        "Watch"
-                    )}
-                </div>
-
-            </div>
-
-
-            <div class="trade-plan-grid">
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Entry
-                    </span>
-
-                    <strong class="trade-entry">
-
-                        ${
-                            isValidNumber(
-                                plan.entryLow
-                            )
-                            &&
-                            isValidNumber(
-                                plan.entryHigh
-                            )
-
-                                ?
-
-                                `${formatPrice(
-                                    plan.entryLow
-                                )} - ${formatPrice(
-                                    plan.entryHigh
-                                )}`
-
-                                :
-
-                                formatPrice(
-                                    plan.entry
-                                )
-                        }
-
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Stop Loss
-                    </span>
-
-                    <strong class="trade-stop">
-                        ${formatPrice(
-                            plan.stop
-                        )}
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Target 1
-                    </span>
-
-                    <strong class="trade-target">
-                        ${formatPrice(
-                            plan.target1
-                        )}
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Target 2
-                    </span>
-
-                    <strong class="trade-target">
-                        ${formatPrice(
-                            plan.target2
-                        )}
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Risk / Reward T1
-                    </span>
-
-                    <strong>
-                        ${formatRiskReward(
-                            plan.rr1
-                        )}
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Risk / Reward T2
-                    </span>
-
-                    <strong>
-                        ${formatRiskReward(
-                            plan.rr2
-                        )}
-                    </strong>
-
-                </div>
-
-
-                <div class="trade-plan-card">
-
-                    <span>
-                        Trade Quality
-                    </span>
-
-                    <strong>
-                        ${escapeHtml(
-                            plan.quality ||
-                            "—"
-                        )}
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            ${
-                plan.planReason
-
-                    ?
-
-                    `
-                        <div class="trade-plan-reason">
-
-                            <strong>
-                                Reason:
-                            </strong>
-
-                            ${escapeHtml(
-                                plan.planReason
-                            )}
-
-                        </div>
-                    `
-
-                    :
-
-                    ""
-            }
-
-
-            ${
-                plan.invalidation
-
-                    ?
-
-                    `
-                        <div class="trade-plan-reason">
-
-                            <strong>
-                                Invalidation:
-                            </strong>
-
-                            ${escapeHtml(
-                                plan.invalidation
-                            )}
-
-                        </div>
-                    `
-
-                    :
-
-                    ""
-            }
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// DETAIL HELPERS
-// ============================================================
-
-function detailSection(
-    title,
-    items
-) {
-
-    const valid =
-        items.filter(
-            item =>
-                item !== ""
-        );
-
-
-    return `
-
-        <div class="detail-section">
-
-            <h3>
-                ${escapeHtml(title)}
-            </h3>
-
-            <div class="detail-grid">
-
-                ${valid.join("")}
-
-            </div>
-
-        </div>
-
-    `;
-
-}
-
-
-function detailItem(
-    label,
-    value
-) {
-
-    if (
-        value === undefined ||
-        value === null ||
-        value === "" ||
-        value === "NaN" ||
-        value === "nan"
-    ) {
-
-        value =
-            "Unavailable";
-
-    }
-
-
-    return `
-
-        <div class="detail-item">
-
-            <span>
-                ${escapeHtml(
-                    label
-                )}
-            </span>
-
-            <strong>
-                ${escapeHtml(
-                    String(value)
-                )}
-            </strong>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// WATCHLIST MEMBERSHIP
-// ============================================================
-
-function findWatchlistMembership(
-    symbol
-) {
-
-    const names = [];
-
-
-    Object.entries(
-        dashboardData.watchlists ||
-        {}
-    ).forEach(
-        ([key, list]) => {
-
-            if (
-                !Array.isArray(
-                    list
-                )
-            ) {
-                return;
-            }
-
-
-            const exists =
-                list.some(
-                    stock =>
-                        String(
-                            stock.symbol ||
-                            stock.nse_symbol ||
-                            ""
-                        ).toUpperCase()
-                        ===
-                        String(
-                            symbol
-                        ).toUpperCase()
-                );
-
-
-            if (exists) {
-
-                names.push(
-                    WATCHLIST_NAMES[
-                        key
-                    ] ||
-                    key
-                );
-
-            }
-
-        }
-    );
-
-
-    return names.length
-        ? names.join(", ")
-        : "Master Ranking";
-
-}
-
-
-// ============================================================
-// TRADE VALUES
-// ============================================================
-
-function tradeValue(
-    stock,
-    key
-) {
-
-    const aliases = {
-
-        entry_price: [
-            "entry_price",
-            "entry",
-            "Entry_Price"
-        ],
-
-        entry_low: [
-            "entry_low",
-            "Entry_Low"
-        ],
-
-        entry_high: [
-            "entry_high",
-            "Entry_High"
-        ],
-
-        stop_loss: [
-            "stop_loss",
-            "stop",
-            "Stop_Loss"
-        ],
-
-        target_1: [
-            "target_1",
-            "target1",
-            "Target_1"
-        ],
-
-        target_2: [
-            "target_2",
-            "target2",
-            "Target_2"
-        ]
-
-    };
-
-
-    const keys =
-        aliases[key] ||
-        [key];
-
-
-    for (
-        const field of keys
-    ) {
-
-        if (
-            isValidNumber(
-                stock[field]
-            )
-        ) {
-
-            return Number(
-                stock[field]
+            alert(
+                "No stocks available for export."
             );
 
+            return;
+
         }
 
-    }
 
+        const rows =
+            stocks.map(
+                (s,index) => ({
 
-    return null;
+                    Rank: index + 1,
 
-}
+                    Symbol: s.symbol,
 
+                    Company: s.company_name,
 
-// ============================================================
-// STATUS / BADGES
-// ============================================================
+                    "LTP / Last Close":
+                        s.price,
 
-function statusBadge(
-    value
-) {
+                    "Daily Change %":
+                        s.daily_return_pct,
 
-    if (
-        value === undefined ||
-        value === null ||
-        value === ""
-    ) {
+                    "200 DMA":
+                        s.sma200,
 
-        return "—";
+                    "52W High":
+                        s.high52,
 
-    }
+                    RSI:
+                        s.rsi,
 
+                    "Volume Ratio":
+                        s.volume_ratio,
 
-    const text =
-        String(
-            value
-        );
+                    "Technical Score":
+                        s.technical_score,
 
+                    "Fundamental Score":
+                        s.fundamental_score,
 
-    const lower =
-        text.toLowerCase();
+                    "Overall Score":
+                        s.overall_score,
 
+                    Setup:
+                        s.setup,
 
-    let className =
-        "badge-neutral";
+                    Entry:
+                        s.entry,
 
+                    "Stop Loss":
+                        s.stop,
 
-    if (
-        lower.includes("strong bullish") ||
-        lower.includes("bullish") ||
-        lower.includes("positive") ||
-        lower.includes("breakout")
-    ) {
+                    "Target 1":
+                        s.target1,
 
-        className =
-            "badge-positive";
+                    "Target 2":
+                        s.target2,
 
-    }
-    else if (
-        lower.includes("bearish") ||
-        lower.includes("negative") ||
-        lower.includes("avoid") ||
-        lower.includes("weak")
-    ) {
+                    "Risk Reward":
+                        s.rr,
 
-        className =
-            "badge-negative";
+                    "Trade Plan Status":
+                        s.plan_status,
 
-    }
+                    Reason:
+                        s.plan_reason,
 
+                    Invalidation:
+                        s.invalidation
 
-    return `
+                })
+            );
 
-        <span class="status-badge ${className}">
-            ${escapeHtml(text)}
-        </span>
 
-    `;
-
-}
-
-
-function getRegimeClass(
-    value
-) {
-
-    const text =
-        String(
-            value ||
-            ""
-        ).toLowerCase();
-
-
-    if (
-        text.includes(
-            "bullish"
-        )
-    ) {
-
-        return "regime-bullish";
-
-    }
-
-
-    if (
-        text.includes(
-            "bearish"
-        )
-    ) {
-
-        return "regime-bearish";
-
-    }
-
-
-    if (
-        text.includes(
-            "weak"
-        )
-        ||
-        text.includes(
-            "cautious"
-        )
-    ) {
-
-        return "regime-caution";
-
-    }
-
-
-    return "regime-neutral";
-
-}
-
-
-function getEnvironmentClass(
-    value
-) {
-
-    const text =
-        String(
-            value ||
-            ""
-        ).toLowerCase();
-
-
-    if (
-        text.includes(
-            "favorable"
-        )
-        ||
-        text.includes(
-            "positive"
-        )
-        ||
-        text.includes(
-            "selective"
-        )
-    ) {
-
-        return "positive";
-
-    }
-
-
-    if (
-        text.includes(
-            "avoid"
-        )
-        ||
-        text.includes(
-            "high risk"
-        )
-        ||
-        text.includes(
-            "very high"
-        )
-        ||
-        text.includes(
-            "defensive"
-        )
-    ) {
-
-        return "negative";
-
-    }
-
-
-    return "neutral";
-
-}
-
-
-function getTradePlanClass(
-    value
-) {
-
-    const text =
-        String(
-            value ||
-            ""
-        ).toLowerCase();
-
-
-    if (
-        text.includes(
-            "strong"
-        )
-        ||
-        text.includes(
-            "active"
-        )
-        ||
-        text.includes(
-            "confirmed"
-        )
-    ) {
-
-        return "trade-plan-positive";
-
-    }
-
-
-    if (
-        text.includes(
-            "poor"
-        )
-        ||
-        text.includes(
-            "avoid"
-        )
-        ||
-        text.includes(
-            "invalid"
-        )
-    ) {
-
-        return "trade-plan-negative";
-
-    }
-
-
-    if (
-        text.includes(
-            "watch"
-        )
-        ||
-        text.includes(
-            "confirm"
-        )
-    ) {
-
-        return "trade-plan-watch";
-
-    }
-
-
-    return "trade-plan-neutral";
-
-}
-
-
-function riskRewardClass(
-    value
-) {
-
-    if (
-        !isValidNumber(value)
-    ) {
-
-        return "neutral";
-
-    }
-
-
-    const number =
-        Number(value);
-
-
-    if (
-        number >= 2
-    ) {
-
-        return "positive";
-
-    }
-
-
-    if (
-        number >= 1.5
-    ) {
-
-        return "neutral";
-
-    }
-
-
-    return "negative";
-
-}
-
-
-// ============================================================
-// FORMATTING
-// ============================================================
-
-function formatPrice(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    return (
-
-        "₹" +
-
-        Number(
-            value
-        ).toLocaleString(
-            "en-IN",
-            {
-                minimumFractionDigits:
-                    2,
-
-                maximumFractionDigits:
-                    2
-            }
-        )
-
-    );
-
-}
-
-
-function formatNumber(
-    value,
-    decimals = 2
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    return Number(
-        value
-    ).toLocaleString(
-        "en-IN",
-        {
-            minimumFractionDigits:
-                decimals,
-
-            maximumFractionDigits:
-                decimals
-        }
-    );
-
-}
-
-
-function formatInteger(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    return Number(
-        value
-    ).toLocaleString(
-        "en-IN",
-        {
-            maximumFractionDigits:
-                0
-        }
-    );
-
-}
-
-
-function formatPercent(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    return (
-
-        Number(
-            value
-        ).toFixed(2) +
-
-        "%"
-
-    );
-
-}
-
-
-function formatSignedPercent(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    const number =
-        Number(value);
-
-
-    return (
-
-        (
-            number > 0
-                ? "+"
-                : ""
-        )
-
-        +
-
-        number.toFixed(2)
-
-        +
-
-        "%"
-
-    );
-
-}
-
-
-function formatRiskReward(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    return (
-        "1:" +
-        Number(
-            value
-        ).toFixed(2)
-    );
-
-}
-
-
-function formatLargeNumber(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
-
-
-    const number =
-        Number(value);
-
-
-    if (
-        Math.abs(
-            number
-        ) >= 1e7
-    ) {
-
-        return (
-
-            "₹" +
-
-            (
-                number /
-                1e7
-            ).toFixed(2)
-
-            +
-
-            " Cr"
-
+        downloadExcelOrCSV(
+            rows,
+            `NSE_${currentWatchlist}_watchlist`
         );
 
     }
 
 
-    if (
-        Math.abs(
-            number
-        ) >= 1e5
-    ) {
-
-        return (
-
-            "₹" +
-
-            (
-                number /
-                1e5
-            ).toFixed(2)
-
-            +
-
-            " L"
-
-        );
-
-    }
-
-
-    return (
-
-        "₹" +
-
-        number.toLocaleString(
-            "en-IN",
-            {
-                maximumFractionDigits:
-                    0
-            }
-        )
-
-    );
-
-}
-
-
-function formatBoolean(
-    value
-) {
-
-    if (
-        value === true ||
-        value === "true" ||
-        value === 1
-    ) {
-
-        return "Yes";
-
-    }
-
-
-    if (
-        value === false ||
-        value === "false" ||
-        value === 0
-    ) {
-
-        return "No";
-
-    }
-
-
-    return "—";
-
-}
-
-
-function percentageOf(
-    value,
-    total
-) {
-
-    if (
-        !isValidNumber(value)
-        ||
-        !isValidNumber(total)
-        ||
-        Number(total) === 0
-    ) {
-
-        return "";
-
-    }
-
-
-    return (
-
-        (
-            Number(value) /
-            Number(total) *
-            100
-        ).toFixed(2)
-
-        +
-
-        "%"
-
-    );
-
-}
-
-
-function isValidNumber(
-    value
-) {
-
-    if (
-        value === null ||
-        value === undefined ||
-        value === "" ||
-        typeof value === "boolean"
-    ) {
-
-        return false;
-
-    }
-
-
-    const number =
-        Number(value);
-
-
-    return Number.isFinite(
-        number
-    );
-
-}
-
-
-function firstValue(
-    ...values
-) {
-
-    for (
-        const value of values
+    function downloadExcelOrCSV(
+        rows,
+        filename
     ) {
 
         if (
-            value !== undefined &&
-            value !== null &&
-            value !== ""
+            typeof XLSX !== "undefined"
         ) {
 
-            return value;
+            const worksheet =
+                XLSX.utils.json_to_sheet(
+                    rows
+                );
+
+
+            const workbook =
+                XLSX.utils.book_new();
+
+
+            XLSX.utils.book_append_sheet(
+                workbook,
+                worksheet,
+                "Watchlist"
+            );
+
+
+            XLSX.writeFile(
+                workbook,
+                filename + ".xlsx"
+            );
+
+
+            return;
 
         }
 
-    }
+
+        const headers =
+            Object.keys(
+                rows[0]
+            );
 
 
-    return null;
+        const csv = [
 
-}
+            headers.join(","),
 
+            ...rows.map(
+                row =>
+                    headers
+                        .map(
+                            h =>
+                                csvValue(
+                                    row[h]
+                                )
+                        )
+                        .join(",")
+            )
 
-// ============================================================
-// CHANGE / RISK
-// ============================================================
-
-function getChangeClass(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "";
-
-    }
+        ].join("\n");
 
 
-    const number =
-        Number(value);
+        const blob =
+            new Blob(
+                [csv],
+                {
+                    type:
+                        "text/csv;charset=utf-8;"
+                }
+            );
 
 
-    if (
-        number > 0
-    ) {
-
-        return "positive";
-
-    }
+        const url =
+            URL.createObjectURL(
+                blob
+            );
 
 
-    if (
-        number < 0
-    ) {
-
-        return "negative";
-
-    }
+        const a =
+            document.createElement(
+                "a"
+            );
 
 
-    return "neutral";
+        a.href = url;
 
-}
-
-
-function vixRiskLabel(
-    value
-) {
-
-    if (
-        !isValidNumber(
-            value
-        )
-    ) {
-
-        return "—";
-
-    }
+        a.download =
+            filename + ".csv";
 
 
-    const number =
-        Number(value);
+        document.body.appendChild(a);
 
+        a.click();
 
-    if (
-        number >= 25
-    ) {
+        a.remove();
 
-        return "Very High";
-
-    }
-
-
-    if (
-        number >= 20
-    ) {
-
-        return "High";
-
-    }
-
-
-    if (
-        number >= 15
-    ) {
-
-        return "Normal";
-
-    }
-
-
-    if (
-        number >= 12
-    ) {
-
-        return "Low";
-
-    }
-
-
-    return "Very Low";
-
-}
-
-
-// ============================================================
-// ESCAPING
-// ============================================================
-
-function escapeHtml(
-    value
-) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-
-        return "";
-
-    }
-
-
-    return String(
-        value
-    )
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
+        URL.revokeObjectURL(
+            url
         );
 
-}
-
-
-function escapeJs(
-    value
-) {
-
-    return String(
-        value ||
-        ""
-    )
-        .replace(
-            /\\/g,
-            "\\\\"
-        )
-        .replace(
-            /'/g,
-            "\\'"
-        )
-        .replace(
-            /"/g,
-            '\\"'
-        );
-
-}
-
-
-// ============================================================
-// LAST UPDATED
-// ============================================================
-
-function updateLastUpdated() {
-
-    const element =
-        document.getElementById(
-            "lastUpdated"
-        );
-
-
-    if (!element) {
-        return;
     }
 
 
-    const generated =
-        dashboardData.generated_at;
+    function csvValue(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+
+            return "";
+
+        }
 
 
-    const marketDate =
-        dashboardData.market?.market_data_date;
+        const str =
+            String(value)
+                .replace(
+                    /"/g,
+                    '""'
+                );
 
 
-    let text = "";
-
-
-    if (marketDate) {
-
-        text +=
-            "Market date: " +
-            marketDate;
+        return `"${str}"`;
 
     }
 
 
-    if (generated) {
+    /* =====================================================
+       HEADER STATUS
+    ===================================================== */
+
+    function renderLastUpdated() {
+
+        const element =
+            $("lastUpdated");
+
+
+        if (!element) return;
+
+
+        const generated =
+            first(
+                dashboardData,
+                [
+                    "generated_at",
+                    "Generated_At",
+                    "updated_at",
+                    "last_updated"
+                ]
+            );
+
+
+        if (!generated) {
+
+            element.textContent =
+                "Data loaded";
+
+            return;
+
+        }
+
 
         const date =
             new Date(
@@ -4537,87 +4397,251 @@ function updateLastUpdated() {
 
 
         if (
-            !isNaN(
+            Number.isNaN(
                 date.getTime()
             )
         ) {
 
-            if (text) {
-                text += " • ";
-            }
+            element.textContent =
+                String(generated);
+
+            return;
+
+        }
 
 
-            text +=
-                "Dashboard updated: " +
-                date.toLocaleString(
-                    "en-IN",
-                    {
-                        dateStyle:
-                            "medium",
+        element.textContent =
+            "Updated " +
+            date.toLocaleString(
+                "en-IN",
+                {
+                    dateStyle:"medium",
+                    timeStyle:"short"
+                }
+            );
 
-                        timeStyle:
-                            "short"
-                    }
+    }
+
+
+    /* =====================================================
+       PORTFOLIO INITIALIZATION
+    ===================================================== */
+
+    function initializePortfolio() {
+
+        /*
+         portfolio.js is loaded after this file.
+         It exposes initializePortfolioBuilder().
+        */
+
+        if (
+            typeof window.initializePortfolioBuilder ===
+            "function"
+        ) {
+
+            try {
+
+                window.initializePortfolioBuilder(
+                    dashboardData
                 );
+
+            } catch (error) {
+
+                console.error(
+                    "Portfolio initialization error:",
+                    error
+                );
+
+            }
 
         }
 
     }
 
 
-    element.textContent =
-        text ||
-        "Data timestamp unavailable.";
+    /* =====================================================
+       MAIN LOAD
+    ===================================================== */
 
-}
+    async function loadDashboard() {
 
+        try {
 
-// ============================================================
-// ERROR
-// ============================================================
+            if ($("marketStatusText")) {
 
-function showDashboardError(
-    message
-) {
+                $("marketStatusText").textContent =
+                    "LOADING MARKET DATA";
 
-    const ids = [
-
-        "marketRegime",
-
-        "marketIndexGrid",
-
-        "marketEnvironmentGrid",
-
-        "marketAnalysisGrid",
-
-        "breadthCards",
-
-        "stockTable"
-
-    ];
-
-
-    ids.forEach(
-        id => {
-
-            const element =
-                document.getElementById(
-                    id
-                );
-
-
-            if (!element) {
-                return;
             }
 
 
-            if (
-                element.tagName
-                ===
-                "TBODY"
-            ) {
+            const response =
+                await fetch(
+                    DATA_URL,
+                    {
+                        cache:"no-store"
+                    }
+                );
 
-                element.innerHTML = `
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `Dashboard data HTTP ${response.status}`
+                );
+
+            }
+
+
+            const data =
+                await response.json();
+
+
+            normalizeDashboardData(
+                data
+            );
+
+
+            renderLastUpdated();
+
+            renderMarketRegime();
+
+            renderMarketIndices();
+
+            renderEnvironment();
+
+            renderMarketAnalysis();
+
+            renderBreadth();
+
+            renderSetupSummary();
+
+            renderSectors();
+
+
+            initializeWatchlistTabs();
+
+            initializeWatchlistControls();
+
+            initializeAllStockControls();
+
+            initializeModal();
+
+
+            switchWatchlist(
+                "next_day"
+            );
+
+
+            renderAllStocks();
+
+
+            initializePortfolio();
+
+
+            if ($("marketStatusText")) {
+
+                $("marketStatusText").textContent =
+                    "DATA LOADED";
+
+            }
+
+
+            const dot =
+                document.querySelector(
+                    ".live-dot"
+                );
+
+
+            if (dot) {
+
+                dot.style.background =
+                    "#18c987";
+
+            }
+
+
+            console.info(
+                "NSE Dashboard loaded:",
+                {
+                    stocks:
+                        allStocks.length,
+
+                    watchlists:
+                        Object.fromEntries(
+                            Object.entries(
+                                watchlists
+                            )
+                            .map(
+                                ([key,list]) =>
+                                    [
+                                        key,
+                                        list.length
+                                    ]
+                            )
+                        )
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Dashboard loading failed:",
+                error
+            );
+
+
+            showDashboardError(
+                error
+            );
+
+        }
+
+    }
+
+
+    /* =====================================================
+       ERROR
+    ===================================================== */
+
+    function showDashboardError(error) {
+
+        const message =
+            error?.message ||
+            "Unknown error";
+
+
+        if ($("marketRegime")) {
+
+            $("marketRegime").innerHTML = `
+
+                <div class="error-state">
+
+                    <strong>
+                        Dashboard data could not be loaded.
+                    </strong>
+
+                    ${escapeHTML(
+                        message
+                    )}
+
+                </div>
+
+            `;
+
+        }
+
+
+        const bodies =
+            document.querySelectorAll(
+                "#stockTable tbody, #sectorTable tbody, #allStocksTable"
+            );
+
+
+        bodies.forEach(
+            body => {
+
+                body.innerHTML = `
 
                     <tr>
 
@@ -4625,9 +4649,7 @@ function showDashboardError(
                             colspan="20"
                             class="error-state"
                         >
-                            ${escapeHtml(
-                                message
-                            )}
+                            Dashboard data unavailable.
                         </td>
 
                     </tr>
@@ -4635,29 +4657,54 @@ function showDashboardError(
                 `;
 
             }
-            else {
+        );
 
-                element.innerHTML = `
 
-                    <div class="error-state">
-                        ${escapeHtml(
-                            message
-                        )}
-                    </div>
+        if ($("marketStatusText")) {
 
-                `;
-
-            }
+            $("marketStatusText").textContent =
+                "DATA ERROR";
 
         }
-    );
 
-}
+    }
 
 
-// ============================================================
-// GLOBAL EXPORTS
-// ============================================================
+    /* =====================================================
+       GLOBAL FUNCTIONS
+    ===================================================== */
 
-window.dashboardData =
-    dashboardData;
+    window.openStockDetail =
+        openStockDetail;
+
+    window.closeStockModal =
+        closeStockModal;
+
+    window.exportCurrentWatchlist =
+        exportCurrentWatchlist;
+
+    window.switchWatchlist =
+        switchWatchlist;
+
+
+    /* =====================================================
+       START
+    ===================================================== */
+
+    if (
+        document.readyState ===
+        "loading"
+    ) {
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            loadDashboard
+        );
+
+    } else {
+
+        loadDashboard();
+
+    }
+
+})();
