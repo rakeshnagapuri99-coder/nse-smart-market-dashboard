@@ -26,19 +26,20 @@ jobs:
         run: |
           python test_nse_universe.py
 
-      - name: Show generated universe
+      - name: Verify NSE universe
         run: |
           echo "======================================"
           echo "NSE UNIVERSE FILE"
           echo "======================================"
 
           if [ -f data/nse_universe.csv ]; then
-            echo "File created successfully"
-            echo "--------------------------------------"
+            echo "✓ NSE universe file created"
+            echo "Total rows:"
             wc -l data/nse_universe.csv
-            echo "--------------------------------------"
+            echo ""
+            echo "First 10 rows:"
             head -10 data/nse_universe.csv
           else
-            echo "NSE universe CSV was not created"
+            echo "✗ NSE universe CSV was not created"
             exit 1
           fi
