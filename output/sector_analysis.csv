@@ -1,0 +1,4 @@
+sector,type,symbol,price,sma20,sma50,sma200,rsi14,return_20d_pct,return_60d_pct,trend,momentum,sector_score,classification,sector_rank
+NIFTY BANK,Sector,^NSEBANK,,,,,,,,Insufficient Data,Insufficient Data,50.0,Neutral,1
+NIFTY IT,Sector,^CNXIT,,,,,,,,Insufficient Data,Insufficient Data,50.0,Neutral,2
+NIFTY PHARMA,Sector,^CNXPHARMA,,,,,,,,Insufficient Data,Insufficient Data,50.0,Neutral,3

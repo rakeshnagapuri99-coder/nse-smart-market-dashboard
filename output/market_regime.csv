@@ -1,0 +1,2 @@
+market_regime,market_score,nifty_score,bank_nifty_score,breadth_score,vix,vix_interpretation,nifty_price,nifty_trend,nifty_momentum,nifty_rsi,bank_nifty_price,bank_nifty_trend,bank_nifty_momentum,bank_nifty_rsi,equity_environment,swing_environment,breakout_environment,intraday_environment,options_environment
+Weak,43.61,50.0,50.0,34.03,,Unavailable,,Insufficient Data,Insufficient Data,,,Insufficient Data,Insufficient Data,,Cautious,Cautious,Avoid Weak Breakouts,Selective,High Risk

@@ -1,0 +1,13 @@
+sector,type,symbol,status
+NIFTY AUTO,Sector,^CNXAUTO,Unavailable
+NIFTY FINANCIAL SERVICES,Sector,^CNXFIN,Unavailable
+NIFTY FMCG,Sector,^CNXFMCG,Unavailable
+NIFTY MEDIA,Sector,^CNXMEDIA,Unavailable
+NIFTY METAL,Sector,^CNXMETAL,Unavailable
+NIFTY PSU BANK,Sector,^CNXPSUBANK,Unavailable
+NIFTY REALTY,Sector,^CNXREALTY,Unavailable
+NIFTY INFRASTRUCTURE,Theme,^CNXINFRA,Unavailable
+NIFTY PSE,Theme,^CNXPSE,Unavailable
+NIFTY CONSUMPTION,Theme,^CNXCONSUM,Unavailable
+NIFTY MNC,Theme,^CNXMNC,Unavailable
+NIFTY SERVICES SECTOR,Theme,^CNXSERVICE,Unavailable
