@@ -1,22 +1,30 @@
-import pandas as pd
-import numpy as np
-import yfinance as yf
+# ============================================================
+# NSE SMART MARKET DASHBOARD V2
+# FUNDAMENTAL ENGINE
+# Created by Rakesh Nagapuri
+# ============================================================
+
 import json
+import math
 import time
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
 
 # ============================================================
-# NSE SMART MARKET DASHBOARD
-# FUNDAMENTAL ENGINE — PRODUCTION V1
+# CONFIGURATION
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+CACHE_DIR = Path("output/fundamental_cache")
+OUTPUT_FILE = Path("output/fundamentals.csv")
 
-OUTPUT_DIR = BASE_DIR / "output"
-CACHE_DIR = OUTPUT_DIR / "fundamental_cache"
-
-FUNDAMENTAL_FILE = OUTPUT_DIR / "fundamentals.csv"
+CACHE_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 
 # ============================================================
@@ -24,761 +32,681 @@ FUNDAMENTAL_FILE = OUTPUT_DIR / "fundamentals.csv"
 # ============================================================
 
 def safe_float(value):
+    """
+    Convert a value to float safely.
+    """
 
     try:
 
         if value is None:
             return np.nan
 
+        if isinstance(value, bool):
+            return np.nan
+
         value = float(value)
 
-        if np.isfinite(value):
-            return value
+        if not math.isfinite(value):
+            return np.nan
+
+        return value
+
+    except (TypeError, ValueError):
 
         return np.nan
 
-    except Exception:
 
+def normalize_percentage(value):
+    """
+    Yahoo Finance sometimes returns ratios as decimals
+    and sometimes as percentages.
+
+    Example:
+        0.18 -> 18%
+        18   -> 18%
+    """
+
+    value = safe_float(value)
+
+    if pd.isna(value):
         return np.nan
 
+    if abs(value) < 10:
+        return value * 100
 
-def calculate_cagr(start_value, end_value, years):
-
-    start_value = safe_float(start_value)
-    end_value = safe_float(end_value)
-
-    if (
-        pd.isna(start_value)
-        or pd.isna(end_value)
-        or start_value <= 0
-        or end_value <= 0
-        or years <= 0
-    ):
-
-        return np.nan
-
-    return (
-        (end_value / start_value)
-        ** (1 / years)
-        - 1
-    ) * 100
+    return value
 
 
-def calculate_margin(profit, revenue):
+def clean_for_json(value):
 
-    profit = safe_float(profit)
-    revenue = safe_float(revenue)
+    if isinstance(value, (np.integer,)):
+        return int(value)
 
-    if (
-        pd.isna(profit)
-        or pd.isna(revenue)
-        or revenue == 0
-    ):
+    if isinstance(value, (np.floating,)):
 
-        return np.nan
+        if not np.isfinite(value):
+            return None
 
-    return (
-        profit / revenue
-    ) * 100
+        return float(value)
+
+    if isinstance(value, float):
+
+        if not math.isfinite(value):
+            return None
+
+        return value
+
+    if pd.isna(value):
+        return None
+
+    return value
+
+
+def safe_get(dictionary, key):
+
+    if not isinstance(dictionary, dict):
+        return None
+
+    return dictionary.get(key)
 
 
 # ============================================================
 # CACHE
 # ============================================================
 
-def get_cache_file(symbol):
+def cache_file(symbol):
 
-    clean_symbol = (
+    safe_symbol = (
         str(symbol)
-        .replace(".NS", "")
+        .upper()
         .replace("/", "_")
         .replace("\\", "_")
+        .replace(":", "_")
     )
 
-    return (
-        CACHE_DIR
-        / f"{clean_symbol}.json"
-    )
+    return CACHE_DIR / f"{safe_symbol}.json"
 
 
-def load_cached_fundamental(symbol):
+def load_cache(symbol):
 
-    cache_file = get_cache_file(symbol)
+    file = cache_file(symbol)
 
-    if not cache_file.exists():
+    if not file.exists():
         return None
 
     try:
 
         with open(
-            cache_file,
+            file,
             "r",
             encoding="utf-8"
-        ) as file:
+        ) as f:
 
-            return json.load(file)
+            return json.load(f)
 
     except Exception:
 
         return None
 
 
-def save_cached_fundamental(
-    symbol,
-    data
-):
+def save_cache(symbol, data):
 
-    CACHE_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    cache_file = get_cache_file(symbol)
+    file = cache_file(symbol)
 
     try:
+
+        cleaned = {
+            key: clean_for_json(value)
+            for key, value in data.items()
+        }
 
         with open(
-            cache_file,
+            file,
             "w",
             encoding="utf-8"
-        ) as file:
+        ) as f:
 
             json.dump(
-                data,
-                file,
-                indent=2,
-                default=str
+                cleaned,
+                f,
+                ensure_ascii=False,
+                indent=2
             )
 
-    except Exception as e:
+    except Exception as error:
 
         print(
-            f"Unable to save cache "
-            f"{symbol}: {e}"
+            f"Unable to save fundamental cache "
+            f"for {symbol}: {error}"
         )
 
 
 # ============================================================
-# YAHOO FUNDAMENTAL DATA
+# FINANCIAL STATEMENT HELPERS
 # ============================================================
 
-def download_fundamental_data(
-    symbol
+def get_statement_series(
+    statement,
+    possible_names
 ):
+    """
+    Find a financial statement row using several
+    possible Yahoo Finance names.
+    """
+
+    if statement is None or statement.empty:
+        return pd.Series(dtype=float)
+
+    for name in possible_names:
+
+        if name in statement.index:
+
+            series = statement.loc[name]
+
+            if isinstance(series, pd.DataFrame):
+                series = series.iloc[0]
+
+            return pd.to_numeric(
+                series,
+                errors="coerce"
+            )
+
+    return pd.Series(dtype=float)
+
+
+def calculate_cagr_from_series(
+    series,
+    years=3
+):
+    """
+    Calculate CAGR using the oldest available
+    observation within the requested period.
+
+    CAGR = (Ending / Beginning)^(1/n) - 1
+
+    Requires positive beginning and ending values.
+    """
+
+    if series is None or len(series) < 2:
+        return np.nan
+
+    series = (
+        pd.to_numeric(
+            series,
+            errors="coerce"
+        )
+        .dropna()
+    )
+
+    if len(series) < 2:
+        return np.nan
+
+    # Yahoo normally provides annual columns newest -> oldest.
+    # Sort dates where possible.
+    try:
+
+        dates = pd.to_datetime(
+            series.index,
+            errors="coerce"
+        )
+
+        valid = ~dates.isna()
+
+        if valid.any():
+
+            series = series.loc[valid]
+            dates = dates[valid]
+
+            order = np.argsort(
+                dates.values
+            )
+
+            series = series.iloc[order]
+
+    except Exception:
+        pass
+
+    if len(series) < 2:
+        return np.nan
+
+    # Use approximately requested number of years.
+    # With annual statements, selecting the oldest available
+    # observation is preferable when fewer than the requested
+    # years are available.
+    periods = min(
+        years,
+        len(series) - 1
+    )
+
+    beginning = safe_float(
+        series.iloc[-(periods + 1)]
+    )
+
+    ending = safe_float(
+        series.iloc[-1]
+    )
+
+    if (
+        pd.isna(beginning) or
+        pd.isna(ending) or
+        beginning <= 0 or
+        ending <= 0
+    ):
+        return np.nan
 
     try:
 
-        ticker = yf.Ticker(symbol)
+        return (
+            (
+                ending /
+                beginning
+            ) ** (1 / periods)
+            - 1
+        ) * 100
 
-        info = ticker.info
+    except Exception:
 
-        if not info:
-
-            return {}
-
-        return info
-
-    except Exception as e:
-
-        print(
-            f"Fundamental download failed "
-            f"{symbol}: {e}"
-        )
-
-        return {}
+        return np.nan
 
 
-# ============================================================
-# FUNDAMENTAL EXTRACTION
-# ============================================================
-
-def extract_fundamentals(
-    symbol,
-    info
+def calculate_growth_from_series(
+    series
 ):
+    """
+    Calculate latest year-over-year growth.
+    """
 
-    if not info:
+    if series is None or len(series) < 2:
+        return np.nan
 
-        return None
-
-    market_cap = safe_float(
-        info.get(
-            "marketCap"
+    series = (
+        pd.to_numeric(
+            series,
+            errors="coerce"
         )
+        .dropna()
     )
 
-    enterprise_value = safe_float(
-        info.get(
-            "enterpriseValue"
+    if len(series) < 2:
+        return np.nan
+
+    try:
+
+        latest = safe_float(
+            series.iloc[0]
         )
-    )
 
-    revenue = safe_float(
-        info.get(
-            "totalRevenue"
+        previous = safe_float(
+            series.iloc[1]
         )
-    )
 
-    gross_profit = safe_float(
-        info.get(
-            "grossProfits"
+        if (
+            pd.isna(latest) or
+            pd.isna(previous) or
+            previous == 0
+        ):
+            return np.nan
+
+        return (
+            (latest - previous) /
+            abs(previous)
+        ) * 100
+
+    except Exception:
+
+        return np.nan
+
+
+# ============================================================
+# ROCE
+# ============================================================
+
+def calculate_roce_from_statements(
+    ticker
+):
+    """
+    Calculate ROCE when sufficient financial statement
+    information is available.
+
+    ROCE =
+        EBIT / (Total Assets - Current Liabilities)
+
+    This is only returned when the required inputs exist.
+    """
+
+    try:
+
+        financials = ticker.financials
+
+        balance_sheet = ticker.balance_sheet
+
+        if (
+            financials is None or
+            financials.empty or
+            balance_sheet is None or
+            balance_sheet.empty
+        ):
+            return np.nan
+
+        ebit = get_statement_series(
+            financials,
+            [
+                "EBIT",
+                "Operating Income"
+            ]
         )
-    )
 
-    operating_income = safe_float(
-        info.get(
-            "operatingIncome"
+        assets = get_statement_series(
+            balance_sheet,
+            [
+                "Total Assets"
+            ]
         )
-    )
 
-    ebitda = safe_float(
-        info.get(
-            "ebitda"
+        current_liabilities = get_statement_series(
+            balance_sheet,
+            [
+                "Current Liabilities",
+                "Total Current Liabilities"
+            ]
         )
-    )
 
-    net_income = safe_float(
-        info.get(
-            "netIncomeToCommon"
+        if (
+            ebit.empty or
+            assets.empty or
+            current_liabilities.empty
+        ):
+            return np.nan
+
+        common_dates = (
+            ebit.index
+            .intersection(assets.index)
+            .intersection(
+                current_liabilities.index
+            )
         )
-    )
 
-    eps = safe_float(
-        info.get(
-            "trailingEps"
+        if len(common_dates) == 0:
+            return np.nan
+
+        date = common_dates[0]
+
+        ebit_value = safe_float(
+            ebit.loc[date]
         )
-    )
 
-    forward_eps = safe_float(
-        info.get(
-            "forwardEps"
+        assets_value = safe_float(
+            assets.loc[date]
         )
-    )
 
-    book_value = safe_float(
-        info.get(
-            "bookValue"
+        liabilities_value = safe_float(
+            current_liabilities.loc[date]
         )
-    )
 
-    total_debt = safe_float(
-        info.get(
-            "totalDebt"
+        capital_employed = (
+            assets_value -
+            liabilities_value
         )
-    )
 
-    total_cash = safe_float(
-        info.get(
-            "totalCash"
-        )
-    )
+        if (
+            pd.isna(ebit_value) or
+            pd.isna(capital_employed) or
+            capital_employed <= 0
+        ):
+            return np.nan
 
-    current_assets = safe_float(
-        info.get(
-            "totalCurrentAssets"
-        )
-    )
+        return (
+            ebit_value /
+            capital_employed
+        ) * 100
 
-    current_liabilities = safe_float(
-        info.get(
-            "totalCurrentLiabilities"
-        )
-    )
+    except Exception:
 
-    roe = safe_float(
-        info.get(
-            "returnOnEquity"
-        )
-    )
-
-    roa = safe_float(
-        info.get(
-            "returnOnAssets"
-        )
-    )
-
-    operating_margin = safe_float(
-        info.get(
-            "operatingMargins"
-        )
-    )
-
-    profit_margin = safe_float(
-        info.get(
-            "profitMargins"
-        )
-    )
-
-    gross_margin = safe_float(
-        info.get(
-            "grossMargins"
-        )
-    )
-
-    ebitda_margin = safe_float(
-        info.get(
-            "ebitdaMargins"
-        )
-    )
-
-    debt_to_equity = safe_float(
-        info.get(
-            "debtToEquity"
-        )
-    )
-
-    current_ratio = safe_float(
-        info.get(
-            "currentRatio"
-        )
-    )
-
-    quick_ratio = safe_float(
-        info.get(
-            "quickRatio"
-        )
-    )
-
-    pe = safe_float(
-        info.get(
-            "trailingPE"
-        )
-    )
-
-    forward_pe = safe_float(
-        info.get(
-            "forwardPE"
-        )
-    )
-
-    peg = safe_float(
-        info.get(
-            "pegRatio"
-        )
-    )
-
-    price_to_book = safe_float(
-        info.get(
-            "priceToBook"
-        )
-    )
-
-    dividend_yield = safe_float(
-        info.get(
-            "dividendYield"
-        )
-    )
-
-    earnings_growth = safe_float(
-        info.get(
-            "earningsGrowth"
-        )
-    )
-
-    revenue_growth = safe_float(
-        info.get(
-            "revenueGrowth"
-        )
-    )
-
-    return {
-
-        "symbol": symbol,
-
-        "company_name":
-            info.get(
-                "longName",
-                info.get(
-                    "shortName",
-                    symbol
-                )
-            ),
-
-        "sector":
-            info.get(
-                "sector",
-                ""
-            ),
-
-        "industry":
-            info.get(
-                "industry",
-                ""
-            ),
-
-        "market_cap":
-            market_cap,
-
-        "enterprise_value":
-            enterprise_value,
-
-        "revenue":
-            revenue,
-
-        "gross_profit":
-            gross_profit,
-
-        "operating_income":
-            operating_income,
-
-        "ebitda":
-            ebitda,
-
-        "net_income":
-            net_income,
-
-        "eps":
-            eps,
-
-        "forward_eps":
-            forward_eps,
-
-        "book_value":
-            book_value,
-
-        "total_debt":
-            total_debt,
-
-        "total_cash":
-            total_cash,
-
-        "current_assets":
-            current_assets,
-
-        "current_liabilities":
-            current_liabilities,
-
-        "roe":
-            roe * 100
-            if not pd.isna(roe)
-            and abs(roe) < 10
-            else roe,
-
-        "roa":
-            roa * 100
-            if not pd.isna(roa)
-            and abs(roa) < 10
-            else roa,
-
-        "operating_margin":
-            operating_margin * 100
-            if not pd.isna(operating_margin)
-            and abs(operating_margin) < 10
-            else operating_margin,
-
-        "profit_margin":
-            profit_margin * 100
-            if not pd.isna(profit_margin)
-            and abs(profit_margin) < 10
-            else profit_margin,
-
-        "gross_margin":
-            gross_margin * 100
-            if not pd.isna(gross_margin)
-            and abs(gross_margin) < 10
-            else gross_margin,
-
-        "ebitda_margin":
-            ebitda_margin * 100
-            if not pd.isna(ebitda_margin)
-            and abs(ebitda_margin) < 10
-            else ebitda_margin,
-
-        "debt_equity":
-            debt_to_equity,
-
-        "current_ratio":
-            current_ratio,
-
-        "quick_ratio":
-            quick_ratio,
-
-        "pe":
-            pe,
-
-        "forward_pe":
-            forward_pe,
-
-        "peg":
-            peg,
-
-        "price_to_book":
-            price_to_book,
-
-        "dividend_yield":
-            dividend_yield,
-
-        "earnings_growth":
-            earnings_growth * 100
-            if not pd.isna(earnings_growth)
-            and abs(earnings_growth) < 10
-            else earnings_growth,
-
-        "revenue_growth":
-            revenue_growth * 100
-            if not pd.isna(revenue_growth)
-            and abs(revenue_growth) < 10
-            else revenue_growth,
-
-        "fundamental_data_available":
-            True
-    }
+        return np.nan
 
 
 # ============================================================
 # FUNDAMENTAL SCORE
 # ============================================================
 
-def score_roe(roe):
+def calculate_fundamental_score(row):
 
-    if pd.isna(roe):
-        return 0
+    score = 0
+    available = 0
 
-    if roe >= 25:
-        return 15
+    # --------------------------------------------------------
+    # ROE — 15
+    # --------------------------------------------------------
 
-    if roe >= 20:
-        return 13
-
-    if roe >= 15:
-        return 10
-
-    if roe >= 10:
-        return 7
-
-    if roe >= 5:
-        return 3
-
-    return 0
-
-
-def score_roce(roce):
-
-    if pd.isna(roce):
-        return 0
-
-    if roce >= 25:
-        return 15
-
-    if roce >= 20:
-        return 13
-
-    if roce >= 15:
-        return 10
-
-    if roce >= 10:
-        return 7
-
-    if roce >= 5:
-        return 3
-
-    return 0
-
-
-def score_growth(growth):
-
-    if pd.isna(growth):
-        return 0
-
-    if growth >= 20:
-        return 10
-
-    if growth >= 15:
-        return 8
-
-    if growth >= 10:
-        return 6
-
-    if growth >= 5:
-        return 4
-
-    if growth >= 0:
-        return 2
-
-    return 0
-
-
-def score_debt(debt_equity):
-
-    if pd.isna(debt_equity):
-        return 5
-
-    if debt_equity <= 0.25:
-        return 10
-
-    if debt_equity <= 0.50:
-        return 8
-
-    if debt_equity <= 1:
-        return 6
-
-    if debt_equity <= 2:
-        return 3
-
-    return 0
-
-
-def score_margin(margin):
-
-    if pd.isna(margin):
-        return 0
-
-    if margin >= 20:
-        return 10
-
-    if margin >= 15:
-        return 8
-
-    if margin >= 10:
-        return 6
-
-    if margin >= 5:
-        return 3
-
-    return 0
-
-
-def score_valuation(pe):
-
-    if pd.isna(pe) or pe <= 0:
-        return 5
-
-    if pe <= 15:
-        return 10
-
-    if pe <= 20:
-        return 8
-
-    if pe <= 30:
-        return 6
-
-    if pe <= 45:
-        return 3
-
-    return 1
-
-
-def calculate_fundamental_score(
-    row
-):
-
-    scores = []
-
-    roe_score = score_roe(
-        row.get(
-            "roe",
-            np.nan
-        )
+    roe = safe_float(
+        row.get("roe")
     )
 
-    roce_score = score_roce(
-        row.get(
-            "roce",
-            np.nan
-        )
+    if not pd.isna(roe):
+
+        available += 15
+
+        if roe >= 20:
+            score += 15
+
+        elif roe >= 15:
+            score += 12
+
+        elif roe >= 10:
+            score += 8
+
+        elif roe > 0:
+            score += 4
+
+
+    # --------------------------------------------------------
+    # ROCE — 15
+    # --------------------------------------------------------
+
+    roce = safe_float(
+        row.get("roce")
     )
 
-    revenue_score = score_growth(
-        row.get(
-            "revenue_growth",
-            np.nan
-        )
+    if not pd.isna(roce):
+
+        available += 15
+
+        if roce >= 20:
+            score += 15
+
+        elif roce >= 15:
+            score += 12
+
+        elif roce >= 10:
+            score += 8
+
+        elif roce > 0:
+            score += 4
+
+
+    # --------------------------------------------------------
+    # Revenue Growth / CAGR — 10
+    # --------------------------------------------------------
+
+    revenue_cagr = safe_float(
+        row.get("revenue_cagr")
     )
 
-    profit_score = score_growth(
-        row.get(
-            "earnings_growth",
-            np.nan
-        )
+    revenue_growth = safe_float(
+        row.get("revenue_growth")
     )
 
-    debt_score = score_debt(
-        row.get(
-            "debt_equity",
-            np.nan
-        )
+    revenue_metric = (
+        revenue_cagr
+        if not pd.isna(revenue_cagr)
+        else revenue_growth
     )
 
-    margin_score = score_margin(
-        row.get(
-            "profit_margin",
-            np.nan
-        )
+    if not pd.isna(revenue_metric):
+
+        available += 10
+
+        if revenue_metric >= 20:
+            score += 10
+
+        elif revenue_metric >= 12:
+            score += 8
+
+        elif revenue_metric >= 5:
+            score += 5
+
+        elif revenue_metric > 0:
+            score += 2
+
+
+    # --------------------------------------------------------
+    # Earnings / Profit Growth — 10
+    # --------------------------------------------------------
+
+    profit_cagr = safe_float(
+        row.get("profit_cagr")
     )
 
-    valuation_score = score_valuation(
-        row.get(
-            "pe",
-            np.nan
-        )
+    earnings_growth = safe_float(
+        row.get("earnings_growth")
     )
 
-    scores.extend(
-        [
-            roe_score,
-            roce_score,
-            revenue_score,
-            profit_score,
-            debt_score,
-            margin_score,
-            valuation_score
-        ]
+    earnings_metric = (
+        profit_cagr
+        if not pd.isna(profit_cagr)
+        else earnings_growth
     )
 
-    # Maximum possible:
-    # ROE       15
-    # ROCE      15
-    # Revenue   10
-    # Earnings  10
-    # Debt      10
-    # Margin    10
-    # Valuation 10
-    #
-    # Total = 80
-    #
-    # Normalize to 100.
+    if not pd.isna(earnings_metric):
 
-    raw_score = sum(scores)
+        available += 10
 
-    return round(
-        raw_score / 80 * 100,
-        2
+        if earnings_metric >= 20:
+            score += 10
+
+        elif earnings_metric >= 12:
+            score += 8
+
+        elif earnings_metric >= 5:
+            score += 5
+
+        elif earnings_metric > 0:
+            score += 2
+
+
+    # --------------------------------------------------------
+    # Debt / Equity — 10
+    # --------------------------------------------------------
+
+    debt_equity = safe_float(
+        row.get("debt_equity")
     )
+
+    if not pd.isna(debt_equity):
+
+        available += 10
+
+        if debt_equity <= 0.25:
+            score += 10
+
+        elif debt_equity <= 0.50:
+            score += 8
+
+        elif debt_equity <= 1:
+            score += 5
+
+        elif debt_equity <= 2:
+            score += 2
+
+
+    # --------------------------------------------------------
+    # Profit Margin — 10
+    # --------------------------------------------------------
+
+    profit_margin = safe_float(
+        row.get("profit_margin")
+    )
+
+    if not pd.isna(profit_margin):
+
+        available += 10
+
+        if profit_margin >= 20:
+            score += 10
+
+        elif profit_margin >= 12:
+            score += 8
+
+        elif profit_margin >= 5:
+            score += 5
+
+        elif profit_margin > 0:
+            score += 2
+
+
+    # --------------------------------------------------------
+    # PE — 10
+    # --------------------------------------------------------
+
+    pe = safe_float(
+        row.get("pe")
+    )
+
+    if not pd.isna(pe):
+
+        available += 10
+
+        if 0 < pe <= 15:
+            score += 10
+
+        elif pe <= 25:
+            score += 8
+
+        elif pe <= 40:
+            score += 5
+
+        elif pe <= 60:
+            score += 2
+
+
+    if available == 0:
+
+        return np.nan
+
+    return (
+        score /
+        available
+    ) * 100
 
 
 # ============================================================
 # FUNDAMENTAL QUALITY
 # ============================================================
 
-def classify_fundamental_quality(
+def determine_fundamental_quality(
     score
 ):
 
     if pd.isna(score):
-
         return "Data Unavailable"
 
     if score >= 80:
-
         return "Excellent"
 
     if score >= 65:
-
         return "Strong"
 
     if score >= 50:
-
         return "Average"
 
     if score >= 35:
-
         return "Weak"
 
     return "Poor"
 
 
 # ============================================================
-# SINGLE STOCK
+# SINGLE STOCK ANALYSIS
 # ============================================================
 
 def analyze_stock(
@@ -786,74 +714,604 @@ def analyze_stock(
     use_cache=True
 ):
 
+    symbol = str(symbol).upper().strip()
+
+    if not symbol:
+        return {}
+
+    # --------------------------------------------------------
+    # Cache
+    # --------------------------------------------------------
+
     if use_cache:
 
-        cached = load_cached_fundamental(
-            symbol
-        )
+        cached = load_cache(symbol)
 
         if cached:
 
+            cached["symbol"] = symbol
+
             return cached
 
-    print(
-        f"Fetching fundamentals: "
-        f"{symbol}"
-    )
+    yahoo_symbol = symbol
 
-    info = download_fundamental_data(
-        symbol
-    )
+    if not yahoo_symbol.endswith(".NS"):
+        yahoo_symbol = f"{symbol}.NS"
 
-    if not info:
+    result = {
+        "symbol": symbol,
+        "yahoo_symbol": yahoo_symbol,
+        "fundamental_data_available": False
+    }
 
-        return {
+    try:
 
-            "symbol": symbol,
+        ticker = yf.Ticker(
+            yahoo_symbol
+        )
 
-            "fundamental_data_available":
-                False,
+        info = ticker.info
 
-            "fundamental_score":
-                np.nan,
+        if not isinstance(info, dict):
+            info = {}
 
-            "fundamental_quality":
-                "Data Unavailable"
-        }
+        # ----------------------------------------------------
+        # Basic company information
+        # ----------------------------------------------------
 
-    result = extract_fundamentals(
-        symbol,
-        info
-    )
+        result["company_name"] = (
+            safe_get(
+                info,
+                "longName"
+            )
+            or
+            safe_get(
+                info,
+                "shortName"
+            )
+        )
 
-    if result is None:
+        result["sector"] = safe_get(
+            info,
+            "sector"
+        )
 
-        return None
+        result["industry"] = safe_get(
+            info,
+            "industry"
+        )
 
-    result[
-        "fundamental_score"
-    ] = calculate_fundamental_score(
-        result
-    )
+        # ----------------------------------------------------
+        # Valuation / size
+        # ----------------------------------------------------
 
-    result[
-        "fundamental_quality"
-    ] = classify_fundamental_quality(
-        result[
-            "fundamental_score"
+        result["market_cap"] = safe_float(
+            safe_get(
+                info,
+                "marketCap"
+            )
+        )
+
+        result["enterprise_value"] = safe_float(
+            safe_get(
+                info,
+                "enterpriseValue"
+            )
+        )
+
+        result["pe"] = safe_float(
+            safe_get(
+                info,
+                "trailingPE"
+            )
+        )
+
+        result["forward_pe"] = safe_float(
+            safe_get(
+                info,
+                "forwardPE"
+            )
+        )
+
+        result["peg"] = safe_float(
+            safe_get(
+                info,
+                "pegRatio"
+            )
+        )
+
+        result["price_to_book"] = safe_float(
+            safe_get(
+                info,
+                "priceToBook"
+            )
+        )
+
+        result["dividend_yield"] = normalize_percentage(
+            safe_get(
+                info,
+                "dividendYield"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Profitability
+        # ----------------------------------------------------
+
+        result["roe"] = normalize_percentage(
+            safe_get(
+                info,
+                "returnOnEquity"
+            )
+        )
+
+        result["roa"] = normalize_percentage(
+            safe_get(
+                info,
+                "returnOnAssets"
+            )
+        )
+
+        result["operating_margin"] = normalize_percentage(
+            safe_get(
+                info,
+                "operatingMargins"
+            )
+        )
+
+        result["profit_margin"] = normalize_percentage(
+            safe_get(
+                info,
+                "profitMargins"
+            )
+        )
+
+        result["gross_margin"] = normalize_percentage(
+            safe_get(
+                info,
+                "grossMargins"
+            )
+        )
+
+        result["ebitda_margin"] = normalize_percentage(
+            safe_get(
+                info,
+                "ebitdaMargins"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Growth
+        # ----------------------------------------------------
+
+        result["earnings_growth"] = normalize_percentage(
+            safe_get(
+                info,
+                "earningsGrowth"
+            )
+        )
+
+        result["revenue_growth"] = normalize_percentage(
+            safe_get(
+                info,
+                "revenueGrowth"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Balance sheet
+        # ----------------------------------------------------
+
+        result["debt_equity"] = safe_float(
+            safe_get(
+                info,
+                "debtToEquity"
+            )
+        )
+
+        result["current_ratio"] = safe_float(
+            safe_get(
+                info,
+                "currentRatio"
+            )
+        )
+
+        result["quick_ratio"] = safe_float(
+            safe_get(
+                info,
+                "quickRatio"
+            )
+        )
+
+        # ----------------------------------------------------
+        # Financial values
+        # ----------------------------------------------------
+
+        result["revenue"] = safe_float(
+            safe_get(
+                info,
+                "totalRevenue"
+            )
+        )
+
+        result["gross_profit"] = safe_float(
+            safe_get(
+                info,
+                "grossProfits"
+            )
+        )
+
+        result["operating_income"] = safe_float(
+            safe_get(
+                info,
+                "operatingIncome"
+            )
+        )
+
+        result["ebitda"] = safe_float(
+            safe_get(
+                info,
+                "ebitda"
+            )
+        )
+
+        result["net_income"] = safe_float(
+            safe_get(
+                info,
+                "netIncomeToCommon"
+            )
+        )
+
+        result["eps"] = safe_float(
+            safe_get(
+                info,
+                "trailingEps"
+            )
+        )
+
+        result["forward_eps"] = safe_float(
+            safe_get(
+                info,
+                "forwardEps"
+            )
+        )
+
+        result["book_value"] = safe_float(
+            safe_get(
+                info,
+                "bookValue"
+            )
+        )
+
+        result["total_debt"] = safe_float(
+            safe_get(
+                info,
+                "totalDebt"
+            )
+        )
+
+        result["total_cash"] = safe_float(
+            safe_get(
+                info,
+                "totalCash"
+            )
+        )
+
+        result["current_assets"] = safe_float(
+            safe_get(
+                info,
+                "totalCurrentAssets"
+            )
+        )
+
+        result["current_liabilities"] = safe_float(
+            safe_get(
+                info,
+                "totalCurrentLiabilities"
+            )
+        )
+
+        # ----------------------------------------------------
+        # ROCE
+        # ----------------------------------------------------
+
+        result["roce"] = normalize_percentage(
+            safe_get(
+                info,
+                "returnOnCapitalEmployed"
+            )
+        )
+
+        # If Yahoo doesn't provide ROCE, calculate it from
+        # financial statements where possible.
+        if pd.isna(result["roce"]):
+
+            result["roce"] = calculate_roce_from_statements(
+                ticker
+            )
+
+        # ----------------------------------------------------
+        # Multi-year financial statements
+        # ----------------------------------------------------
+
+        try:
+
+            financials = ticker.financials
+
+        except Exception:
+
+            financials = pd.DataFrame()
+
+        revenue_series = get_statement_series(
+            financials,
+            [
+                "Total Revenue",
+                "Operating Revenue"
+            ]
+        )
+
+        net_income_series = get_statement_series(
+            financials,
+            [
+                "Net Income",
+                "Net Income Common Stockholders",
+                "Net Income Including Noncontrolling Interests"
+            ]
+        )
+
+        ebit_series = get_statement_series(
+            financials,
+            [
+                "EBIT",
+                "Operating Income"
+            ]
+        )
+
+        # ----------------------------------------------------
+        # Revenue CAGR
+        # ----------------------------------------------------
+
+        result["revenue_cagr"] = (
+            calculate_cagr_from_series(
+                revenue_series,
+                years=3
+            )
+        )
+
+        result["revenue_cagr_3y"] = (
+            result["revenue_cagr"]
+        )
+
+        # ----------------------------------------------------
+        # Profit CAGR
+        # ----------------------------------------------------
+
+        result["profit_cagr"] = (
+            calculate_cagr_from_series(
+                net_income_series,
+                years=3
+            )
+        )
+
+        result["profit_cagr_3y"] = (
+            result["profit_cagr"]
+        )
+
+        # ----------------------------------------------------
+        # Latest financial statement growth
+        # ----------------------------------------------------
+
+        if pd.isna(
+            result["revenue_growth"]
+        ):
+
+            result["revenue_growth"] = (
+                calculate_growth_from_series(
+                    revenue_series
+                )
+            )
+
+        if pd.isna(
+            result["earnings_growth"]
+        ):
+
+            result["earnings_growth"] = (
+                calculate_growth_from_series(
+                    net_income_series
+                )
+            )
+
+        # ----------------------------------------------------
+        # EPS CAGR
+        # ----------------------------------------------------
+
+        eps_series = pd.Series(
+            dtype=float
+        )
+
+        if (
+            not net_income_series.empty and
+            not financials.empty
+        ):
+
+            try:
+
+                shares = ticker.get_shares_full()
+
+                if (
+                    shares is not None and
+                    not shares.empty
+                ):
+
+                    # EPS history from Yahoo shares data is
+                    # not always aligned cleanly with annual
+                    # financial statements, so only calculate
+                    # where dates can be aligned.
+                    shares = (
+                        shares
+                        .resample("YE")
+                        .last()
+                    )
+
+                    shares.index = (
+                        shares.index
+                        .tz_localize(None)
+                        if getattr(
+                            shares.index,
+                            "tz",
+                            None
+                        )
+                        else shares.index
+                    )
+
+                    income = (
+                        net_income_series.copy()
+                    )
+
+                    income.index = pd.to_datetime(
+                        income.index,
+                        errors="coerce"
+                    )
+
+                    income = income[
+                        ~income.index.isna()
+                    ]
+
+                    if len(income) > 0:
+
+                        eps_values = []
+
+                        for date, value in income.items():
+
+                            try:
+
+                                nearest = (
+                                    shares.index
+                                    .to_series()
+                                    .sub(date)
+                                    .abs()
+                                    .idxmin()
+                                )
+
+                                share_count = safe_float(
+                                    shares.loc[nearest]
+                                )
+
+                                if (
+                                    not pd.isna(share_count) and
+                                    share_count > 0
+                                ):
+
+                                    eps_values.append(
+                                        (
+                                            date,
+                                            value /
+                                            share_count
+                                        )
+                                    )
+
+                            except Exception:
+                                continue
+
+                        if eps_values:
+
+                            eps_series = pd.Series(
+                                {
+                                    date: value
+                                    for date, value
+                                    in eps_values
+                                }
+                            )
+
+            except Exception:
+                eps_series = pd.Series(
+                    dtype=float
+                )
+
+        result["eps_cagr"] = (
+            calculate_cagr_from_series(
+                eps_series,
+                years=3
+            )
+        )
+
+        result["eps_cagr_3y"] = (
+            result["eps_cagr"]
+        )
+
+        # ----------------------------------------------------
+        # Fundamental availability
+        # ----------------------------------------------------
+
+        important_fields = [
+            "revenue",
+            "net_income",
+            "eps",
+            "roe",
+            "debt_equity",
+            "pe"
         ]
-    )
 
-    result[
-        "data_source"
-    ] = "Yahoo Finance"
+        available_fields = sum(
+            not pd.isna(
+                result.get(field)
+            )
+            for field in important_fields
+        )
 
-    save_cached_fundamental(
-        symbol,
-        result
-    )
+        result["fundamental_data_available"] = (
+            available_fields >= 2
+        )
 
-    return result
+        # ----------------------------------------------------
+        # Fundamental score
+        # ----------------------------------------------------
+
+        score_row = pd.Series(result)
+
+        result["fundamental_score"] = (
+            calculate_fundamental_score(
+                score_row
+            )
+        )
+
+        result["fundamental_quality"] = (
+            determine_fundamental_quality(
+                result["fundamental_score"]
+            )
+        )
+
+        result["fundamental_status"] = (
+            "Available"
+            if result["fundamental_data_available"]
+            else
+            "Partial / Unavailable"
+        )
+
+        # ----------------------------------------------------
+        # Cache
+        # ----------------------------------------------------
+
+        save_cache(
+            symbol,
+            result
+        )
+
+        return result
+
+    except Exception as error:
+
+        result["fundamental_status"] = (
+            "Unavailable"
+        )
+
+        result["fundamental_quality"] = (
+            "Data Unavailable"
+        )
+
+        result["error"] = str(error)
+
+        return result
 
 
 # ============================================================
@@ -861,55 +1319,42 @@ def analyze_stock(
 # ============================================================
 
 def analyze_universe(
-    universe,
-    symbols=None,
+    symbols,
     use_cache=True,
     delay=0.15
 ):
 
-    if (
-        universe is None
-        or universe.empty
-    ):
-
+    if symbols is None:
         return pd.DataFrame()
 
-
-    if symbols is None:
-
-        symbols = (
-            universe[
-                "YAHOO_SYMBOL"
+    symbols = list(
+        dict.fromkeys(
+            [
+                str(symbol)
+                .upper()
+                .strip()
+                for symbol in symbols
+                if str(symbol).strip()
             ]
-            .dropna()
-            .astype(str)
-            .tolist()
         )
+    )
 
+    if not symbols:
+        return pd.DataFrame()
 
     results = []
 
     total = len(symbols)
 
     print()
-    print("=" * 60)
-    print("FUNDAMENTAL ANALYSIS")
-    print("=" * 60)
     print(
-        f"Stocks to analyze: {total}"
+        f"Fundamental analysis: {total} stocks"
     )
-    print("=" * 60)
 
-
-    for number, symbol in enumerate(
+    for index, symbol in enumerate(
         symbols,
         start=1
     ):
-
-        print(
-            f"[{number}/{total}] "
-            f"{symbol}"
-        )
 
         try:
 
@@ -919,189 +1364,198 @@ def analyze_universe(
             )
 
             if result:
+                results.append(result)
 
-                results.append(
-                    result
-                )
-
-        except Exception as e:
+        except Exception as error:
 
             print(
                 f"Fundamental error "
-                f"{symbol}: {e}"
+                f"{symbol}: {error}"
             )
 
         if delay > 0:
-
             time.sleep(delay)
 
+        if (
+            index == 1 or
+            index % 25 == 0 or
+            index == total
+        ):
+
+            print(
+                f"Fundamentals progress: "
+                f"{index}/{total}"
+            )
 
     if not results:
-
         return pd.DataFrame()
 
-
-    df = pd.DataFrame(
+    return pd.DataFrame(
         results
     )
 
 
-    numeric_columns = [
-
-        "market_cap",
-        "enterprise_value",
-        "revenue",
-        "gross_profit",
-        "operating_income",
-        "ebitda",
-        "net_income",
-        "eps",
-        "forward_eps",
-        "book_value",
-        "total_debt",
-        "total_cash",
-        "current_assets",
-        "current_liabilities",
-        "roe",
-        "roa",
-        "operating_margin",
-        "profit_margin",
-        "gross_margin",
-        "ebitda_margin",
-        "debt_equity",
-        "current_ratio",
-        "quick_ratio",
-        "pe",
-        "forward_pe",
-        "peg",
-        "price_to_book",
-        "dividend_yield",
-        "earnings_growth",
-        "revenue_growth",
-        "fundamental_score"
-    ]
-
-
-    for column in numeric_columns:
-
-        if column in df.columns:
-
-            df[column] = pd.to_numeric(
-                df[column],
-                errors="coerce"
-            )
-
-
-    return df
-
-
 # ============================================================
-# SAVE
-# ============================================================
-
-def save_fundamentals(
-    df
-):
-
-    if (
-        df is None
-        or df.empty
-    ):
-
-        print(
-            "No fundamental data "
-            "available to save."
-        )
-
-        return
-
-
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-
-    df.to_csv(
-        FUNDAMENTAL_FILE,
-        index=False
-    )
-
-
-    print()
-    print(
-        f"Saved fundamentals: "
-        f"{FUNDAMENTAL_FILE}"
-    )
-
-    print(
-        f"Stocks with data: "
-        f"{len(df)}"
-    )
-
-
-# ============================================================
-# PUBLIC FUNCTION
+# PUBLIC API
 # ============================================================
 
 def get_fundamentals(
     universe,
-    symbols=None
+    symbols=None,
+    use_cache=True
 ):
 
-    df = analyze_universe(
-        universe,
-        symbols=symbols
+    if symbols is None:
+
+        if isinstance(
+            universe,
+            pd.DataFrame
+        ):
+
+            if "YAHOO_SYMBOL" in universe.columns:
+
+                symbols = (
+                    universe[
+                        "YAHOO_SYMBOL"
+                    ]
+                    .dropna()
+                    .tolist()
+                )
+
+            elif "SYMBOL" in universe.columns:
+
+                symbols = (
+                    universe[
+                        "SYMBOL"
+                    ]
+                    .dropna()
+                    .tolist()
+                )
+
+        elif isinstance(
+            universe,
+            (list, tuple, set)
+        ):
+
+            symbols = list(universe)
+
+    if not symbols:
+
+        print(
+            "No symbols supplied for fundamental analysis."
+        )
+
+        return pd.DataFrame()
+
+    # Convert Yahoo symbols to NSE symbols
+    cleaned_symbols = []
+
+    for symbol in symbols:
+
+        symbol = str(symbol).upper().strip()
+
+        if symbol.endswith(".NS"):
+            symbol = symbol[:-3]
+
+        cleaned_symbols.append(
+            symbol
+        )
+
+    data = analyze_universe(
+        cleaned_symbols,
+        use_cache=use_cache
     )
 
-    save_fundamentals(
-        df
+    if data.empty:
+
+        print(
+            "No fundamental data generated."
+        )
+
+        return data
+
+    OUTPUT_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True
     )
 
-    return df
+    data.to_csv(
+        OUTPUT_FILE,
+        index=False
+    )
+
+    print()
+    print(
+        f"Saved fundamentals: {OUTPUT_FILE}"
+    )
+
+    print(
+        f"Fundamental records: {len(data)}"
+    )
+
+    return data
 
 
 # ============================================================
-# STANDALONE
+# COMMAND LINE
 # ============================================================
 
 if __name__ == "__main__":
 
-    from engines.nse_universe import (
-        get_nse_universe
+    print("=" * 70)
+    print(
+        "NSE SMART MARKET DASHBOARD"
+    )
+    print(
+        "FUNDAMENTAL ENGINE V2"
+    )
+    print("=" * 70)
+    print()
+
+    print(
+        "Fundamental Engine loaded successfully."
     )
 
-    universe = get_nse_universe()
+    print()
+    print(
+        "Fundamental metrics:"
+    )
 
-    if universe.empty:
+    metrics = [
+        "Revenue",
+        "Revenue Growth",
+        "Revenue CAGR",
+        "Net Income",
+        "Profit Growth",
+        "Profit CAGR",
+        "EPS",
+        "EPS CAGR",
+        "ROE",
+        "ROCE",
+        "ROA",
+        "Gross Margin",
+        "Operating Margin",
+        "Profit Margin",
+        "EBITDA Margin",
+        "Debt / Equity",
+        "Current Ratio",
+        "Quick Ratio",
+        "PE",
+        "Forward PE",
+        "PEG",
+        "Price / Book",
+        "Dividend Yield",
+        "Market Capitalisation",
+        "Enterprise Value"
+    ]
 
-        print(
-            "NSE universe unavailable."
-        )
+    for metric in metrics:
+        print(f"- {metric}")
 
-    else:
+    print()
+    print(
+        "Fundamental scoring and quality classification enabled."
+    )
 
-        fundamentals = get_fundamentals(
-            universe
-        )
-
-        if not fundamentals.empty:
-
-            print()
-            print(
-                fundamentals[
-                    [
-                        "symbol",
-                        "company_name",
-                        "fundamental_score",
-                        "fundamental_quality",
-                        "roe",
-                        "debt_equity",
-                        "pe"
-                    ]
-                ]
-                .head(20)
-                .to_string(
-                    index=False
-                )
-            )
+    print()
+    print("=" * 70)
