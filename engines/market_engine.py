@@ -4,14 +4,22 @@ import yfinance as yf
 import requests
 import time
 from pathlib import Path
-
+from datetime import datetime
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# MARKET REGIME ENGINE — V2
+# MARKET REGIME ENGINE V2.1
+#
+# IMPORTANT:
+# - NSE official snapshot = authoritative latest market value
+# - Yahoo Finance = historical technical data
+# - Latest NSE session is merged into historical data
+# - Previous Close is kept separately
 # ============================================================
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 OUTPUT_DIR = BASE_DIR / "output"
 
 OUTPUT_DIR.mkdir(
@@ -21,7 +29,7 @@ OUTPUT_DIR.mkdir(
 
 
 # ============================================================
-# INDEX SYMBOLS
+# SYMBOLS
 # ============================================================
 
 INDEXES = {
@@ -31,23 +39,74 @@ INDEXES = {
 }
 
 
+NSE_INDEX_ALIASES = {
+
+    "NIFTY 50": [
+        "NIFTY 50",
+        "NIFTY",
+    ],
+
+    "BANK NIFTY": [
+        "NIFTY BANK",
+        "BANK NIFTY",
+    ],
+
+    "INDIA VIX": [
+        "INDIA VIX",
+        "INDIA VIX INDEX",
+    ],
+}
+
+
 # ============================================================
-# HTTP SESSION
+# NSE SESSION
 # ============================================================
 
 SESSION = requests.Session()
 
 SESSION.headers.update({
-    "User-Agent": (
+
+    "User-Agent":
         "Mozilla/5.0 "
         "(Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 "
         "(KHTML, like Gecko) "
-        "Chrome/139.0 Safari/537.36"
-    ),
-    "Accept": "application/json,text/plain,*/*",
-    "Accept-Language": "en-IN,en;q=0.9"
+        "Chrome/139.0 Safari/537.36",
+
+    "Accept":
+        "application/json,text/plain,*/*",
+
+    "Accept-Language":
+        "en-IN,en;q=0.9",
+
+    "Referer":
+        "https://www.nseindia.com/",
+
+    "Connection":
+        "keep-alive",
+
 })
+
+
+# ============================================================
+# SAFE FLOAT
+# ============================================================
+
+def safe_float(value):
+
+    try:
+
+        if value is None:
+            return np.nan
+
+        if pd.isna(value):
+            return np.nan
+
+        return float(value)
+
+    except Exception:
+
+        return np.nan
 
 
 # ============================================================
@@ -64,8 +123,10 @@ def clean_dataframe(data):
 
     data = data.copy()
 
-    # Handle yfinance MultiIndex
-    if isinstance(data.columns, pd.MultiIndex):
+    if isinstance(
+        data.columns,
+        pd.MultiIndex
+    ):
 
         data.columns = [
             column[0]
@@ -79,7 +140,6 @@ def clean_dataframe(data):
         for column in data.columns
     ]
 
-    # Make sure Close exists
     if "Close" not in data.columns:
 
         close_columns = [
@@ -89,9 +149,13 @@ def clean_dataframe(data):
         ]
 
         if close_columns:
-            data["Close"] = data[close_columns[0]]
+
+            data["Close"] = (
+                data[close_columns[0]]
+            )
 
     if "Close" not in data.columns:
+
         return pd.DataFrame()
 
     data["Close"] = pd.to_numeric(
@@ -103,7 +167,271 @@ def clean_dataframe(data):
         data["Close"].notna()
     ].copy()
 
+    if not data.empty:
+
+        try:
+
+            data.index = pd.to_datetime(
+                data.index
+            )
+
+            if getattr(
+                data.index,
+                "tz",
+                None
+            ) is not None:
+
+                data.index = (
+                    data.index
+                    .tz_convert(
+                        "Asia/Kolkata"
+                    )
+                    .tz_localize(None)
+                )
+
+        except Exception:
+            pass
+
     return data
+
+
+# ============================================================
+# NSE HOME SESSION
+# ============================================================
+
+def initialise_nse_session():
+
+    urls = [
+
+        "https://www.nseindia.com/",
+
+        "https://www.nseindia.com/market-data/"
+        "live-equity-market",
+
+    ]
+
+    for url in urls:
+
+        try:
+
+            response = SESSION.get(
+                url,
+                timeout=20
+            )
+
+            if response.status_code == 200:
+
+                return True
+
+        except Exception as error:
+
+            print(
+                f"NSE session warning: {error}"
+            )
+
+    return False
+
+
+# ============================================================
+# NSE OFFICIAL INDEX SNAPSHOT
+# ============================================================
+
+def get_nse_index_snapshot():
+
+    print()
+    print("=" * 60)
+    print("NSE OFFICIAL INDEX SNAPSHOT")
+    print("=" * 60)
+
+    initialise_nse_session()
+
+    url = (
+        "https://www.nseindia.com/api/allIndices"
+    )
+
+    try:
+
+        response = SESSION.get(
+            url,
+            timeout=30
+        )
+
+        if response.status_code != 200:
+
+            print(
+                f"NSE allIndices HTTP "
+                f"{response.status_code}"
+            )
+
+            return {}
+
+        payload = response.json()
+
+        rows = payload.get(
+            "data",
+            []
+        )
+
+        if not rows:
+
+            print(
+                "NSE allIndices returned "
+                "no data"
+            )
+
+            return {}
+
+        result = {}
+
+        for row in rows:
+
+            index_name = str(
+                row.get(
+                    "index",
+                    ""
+                )
+            ).strip()
+
+            if not index_name:
+                continue
+
+            normalized_name = (
+                index_name.upper()
+                .replace("-", " ")
+                .replace("_", " ")
+            )
+
+            matched_key = None
+
+            for key, aliases in (
+                NSE_INDEX_ALIASES.items()
+            ):
+
+                for alias in aliases:
+
+                    alias_normalized = (
+                        alias.upper()
+                        .replace("-", " ")
+                        .replace("_", " ")
+                    )
+
+                    if (
+                        normalized_name
+                        == alias_normalized
+                    ):
+
+                        matched_key = key
+                        break
+
+                if matched_key:
+                    break
+
+            if not matched_key:
+                continue
+
+            result[matched_key] = row
+
+        print(
+            "NSE index records found:",
+            list(result.keys())
+        )
+
+        return result
+
+    except Exception as error:
+
+        print(
+            f"NSE index API failed: {error}"
+        )
+
+        return {}
+
+
+# ============================================================
+# PARSE NSE SNAPSHOT
+# ============================================================
+
+def parse_nse_snapshot(
+    snapshot,
+    name
+):
+
+    if not snapshot:
+
+        return {
+            "name": name,
+            "available": False
+        }
+
+    row = snapshot.get(name)
+
+    if not row:
+
+        return {
+            "name": name,
+            "available": False
+        }
+
+    return {
+
+        "name":
+            name,
+
+        "available":
+            True,
+
+        "index":
+            row.get("index"),
+
+        "last":
+            safe_float(
+                row.get("last")
+            ),
+
+        "open":
+            safe_float(
+                row.get("open")
+            ),
+
+        "high":
+            safe_float(
+                row.get("high")
+            ),
+
+        "low":
+            safe_float(
+                row.get("low")
+            ),
+
+        "previous_close":
+            safe_float(
+                row.get("previousClose")
+            ),
+
+        "change":
+            safe_float(
+                row.get("variation")
+            ),
+
+        "percent_change":
+            safe_float(
+                row.get("percentChange")
+            ),
+
+        "year_high":
+            safe_float(
+                row.get("yearHigh")
+            ),
+
+        "year_low":
+            safe_float(
+                row.get("yearLow")
+            ),
+
+        "date":
+            row.get("date"),
+
+    }
 
 
 # ============================================================
@@ -122,15 +450,24 @@ def download_yfinance(
         )
 
         data = yf.download(
+
             symbol,
+
             period=period,
+
             interval="1d",
+
             auto_adjust=False,
+
             progress=False,
+
             threads=False
+
         )
 
-        data = clean_dataframe(data)
+        data = clean_dataframe(
+            data
+        )
 
         if not data.empty:
 
@@ -142,15 +479,10 @@ def download_yfinance(
 
             return data
 
-        print(
-            f"yfinance returned no data: "
-            f"{symbol}"
-        )
-
     except Exception as error:
 
         print(
-            f"yfinance failed for "
+            f"yfinance failed "
             f"{symbol}: {error}"
         )
 
@@ -167,7 +499,8 @@ def download_yahoo_chart(
 ):
 
     print(
-        f"Trying Yahoo Chart API: {symbol}"
+        f"Trying Yahoo Chart API: "
+        f"{symbol}"
     )
 
     end_time = int(
@@ -180,22 +513,36 @@ def download_yahoo_chart(
     )
 
     params = {
-        "period1": start_time,
-        "period2": end_time,
-        "interval": "1d",
-        "events": "history",
-        "includeAdjustedClose": "true"
+
+        "period1":
+            start_time,
+
+        "period2":
+            end_time,
+
+        "interval":
+            "1d",
+
+        "events":
+            "history",
+
+        "includeAdjustedClose":
+            "true",
+
     }
 
     urls = [
+
         (
             "https://query1.finance.yahoo.com/"
             f"v8/finance/chart/{symbol}"
         ),
+
         (
             "https://query2.finance.yahoo.com/"
             f"v8/finance/chart/{symbol}"
-        )
+        ),
+
     ]
 
     for url in urls:
@@ -209,33 +556,17 @@ def download_yahoo_chart(
             )
 
             if response.status_code != 200:
-
-                print(
-                    f"Yahoo API HTTP "
-                    f"{response.status_code}: "
-                    f"{symbol}"
-                )
-
                 continue
 
             payload = response.json()
 
-            chart = payload.get(
-                "chart",
-                {}
-            )
-
-            results = chart.get(
-                "result"
+            results = (
+                payload
+                .get("chart", {})
+                .get("result")
             )
 
             if not results:
-
-                print(
-                    f"Yahoo API returned "
-                    f"no result: {symbol}"
-                )
-
                 continue
 
             result = results[0]
@@ -244,79 +575,72 @@ def download_yahoo_chart(
                 "timestamp"
             )
 
-            indicators = result.get(
-                "indicators",
-                {}
+            quote_list = (
+                result
+                .get("indicators", {})
+                .get("quote", [])
             )
 
-            quote_list = indicators.get(
-                "quote",
-                []
-            )
+            if not timestamps:
+                continue
 
-            if not timestamps or not quote_list:
+            if not quote_list:
                 continue
 
             quote = quote_list[0]
-
-            closes = quote.get(
-                "close",
-                []
-            )
-
-            opens = quote.get(
-                "open",
-                []
-            )
-
-            highs = quote.get(
-                "high",
-                []
-            )
-
-            lows = quote.get(
-                "low",
-                []
-            )
-
-            volumes = quote.get(
-                "volume",
-                []
-            )
 
             length = len(timestamps)
 
             def fill_values(values):
 
                 if values is None:
-                    return [np.nan] * length
+
+                    return [
+                        np.nan
+                        for _ in range(length)
+                    ]
 
                 return values
 
-            closes = fill_values(closes)
-            opens = fill_values(opens)
-            highs = fill_values(highs)
-            lows = fill_values(lows)
-            volumes = fill_values(volumes)
-
             data = pd.DataFrame({
-                "Open": opens,
-                "High": highs,
-                "Low": lows,
-                "Close": closes,
-                "Volume": volumes
+
+                "Open":
+                    fill_values(
+                        quote.get("open")
+                    ),
+
+                "High":
+                    fill_values(
+                        quote.get("high")
+                    ),
+
+                "Low":
+                    fill_values(
+                        quote.get("low")
+                    ),
+
+                "Close":
+                    fill_values(
+                        quote.get("close")
+                    ),
+
+                "Volume":
+                    fill_values(
+                        quote.get("volume")
+                    ),
+
             })
 
-            data["Date"] = pd.to_datetime(
-                timestamps,
-                unit="s",
-                utc=True
-            )
-
             data["Date"] = (
-                data["Date"]
-                .dt.tz_convert("Asia/Kolkata")
-                .dt.tz_localize(None)
+                pd.to_datetime(
+                    timestamps,
+                    unit="s",
+                    utc=True
+                )
+                .tz_convert(
+                    "Asia/Kolkata"
+                )
+                .tz_localize(None)
             )
 
             data = data.set_index(
@@ -340,7 +664,7 @@ def download_yahoo_chart(
         except Exception as error:
 
             print(
-                f"Yahoo Chart API failed: "
+                f"Yahoo Chart failed "
                 f"{symbol}: {error}"
             )
 
@@ -348,7 +672,7 @@ def download_yahoo_chart(
 
 
 # ============================================================
-# DOWNLOAD DATA
+# HISTORICAL DATA
 # ============================================================
 
 def download_data(
@@ -356,37 +680,159 @@ def download_data(
     period="2y"
 ):
 
-    # Primary source
     data = download_yfinance(
         symbol,
         period
     )
 
     if not data.empty:
+
         return data
 
-    # Fallback source
     data = download_yahoo_chart(
         symbol,
         period_days=730
     )
 
-    if not data.empty:
-        return data
+    return data
 
-    print(
-        f"ERROR: No market data available "
-        f"for {symbol}"
+
+# ============================================================
+# MERGE OFFICIAL NSE LATEST SESSION
+# ============================================================
+
+def merge_nse_latest(
+    historical,
+    snapshot
+):
+
+    if not snapshot:
+        return historical
+
+    if not snapshot.get(
+        "available",
+        False
+    ):
+
+        return historical
+
+    latest_close = safe_float(
+        snapshot.get("last")
     )
 
-    return pd.DataFrame()
+    if pd.isna(latest_close):
+        return historical
+
+    latest_date = pd.Timestamp(
+        datetime.now()
+        .astimezone()
+        .date()
+    )
+
+    # --------------------------------------------------------
+    # Prefer the NSE reported date when available
+    # --------------------------------------------------------
+
+    raw_date = snapshot.get(
+        "date"
+    )
+
+    if raw_date:
+
+        try:
+
+            parsed = pd.to_datetime(
+                raw_date,
+                dayfirst=True,
+                errors="coerce"
+            )
+
+            if not pd.isna(parsed):
+
+                latest_date = (
+                    pd.Timestamp(
+                        parsed.date()
+                    )
+                )
+
+        except Exception:
+            pass
+
+    official_row = {
+
+        "Open":
+            snapshot.get("open"),
+
+        "High":
+            snapshot.get("high"),
+
+        "Low":
+            snapshot.get("low"),
+
+        "Close":
+            latest_close,
+
+        "Volume":
+            np.nan,
+
+    }
+
+    if historical is None:
+
+        historical = pd.DataFrame()
+
+    historical = historical.copy()
+
+    if not historical.empty:
+
+        historical.index = pd.to_datetime(
+            historical.index
+        ).tz_localize(None)
+
+        historical = (
+            historical[
+                historical.index
+                != latest_date
+            ]
+        )
+
+    official_df = pd.DataFrame(
+        [official_row],
+        index=[latest_date]
+    )
+
+    merged = pd.concat(
+        [
+            historical,
+            official_df
+        ]
+    )
+
+    merged = (
+        merged[
+            ~merged.index.duplicated(
+                keep="last"
+            )
+        ]
+        .sort_index()
+    )
+
+    print(
+        "Official NSE session merged:",
+        latest_date.date(),
+        latest_close
+    )
+
+    return merged
 
 
 # ============================================================
 # TECHNICAL INDICATORS
 # ============================================================
 
-def calculate_indicators(data):
+def calculate_indicators(
+    data
+):
 
     if data.empty:
         return data
@@ -398,7 +844,10 @@ def calculate_indicators(data):
         errors="coerce"
     )
 
+    # --------------------------------------------------------
     # Moving averages
+    # --------------------------------------------------------
+
     data["SMA20"] = (
         close.rolling(20).mean()
     )
@@ -415,7 +864,10 @@ def calculate_indicators(data):
         close.rolling(200).mean()
     )
 
-    # EMAs
+    # --------------------------------------------------------
+    # EMA
+    # --------------------------------------------------------
+
     data["EMA20"] = (
         close.ewm(
             span=20,
@@ -430,12 +882,19 @@ def calculate_indicators(data):
         ).mean()
     )
 
+    # --------------------------------------------------------
     # Daily return
+    # --------------------------------------------------------
+
     data["Daily_Return_Pct"] = (
-        close.pct_change() * 100
+        close.pct_change()
+        * 100
     )
 
-    # RSI 14
+    # --------------------------------------------------------
+    # RSI
+    # --------------------------------------------------------
+
     delta = close.diff()
 
     gain = delta.clip(
@@ -477,11 +936,16 @@ def calculate_indicators(data):
 # TREND
 # ============================================================
 
-def determine_trend(row):
+def determine_trend(
+    row
+):
 
     price = row["Close"]
+
     sma20 = row["SMA20"]
+
     sma50 = row["SMA50"]
+
     sma200 = row["SMA200"]
 
     if any(
@@ -493,6 +957,7 @@ def determine_trend(row):
             sma200
         ]
     ):
+
         return "Insufficient Data"
 
     if (
@@ -500,12 +965,14 @@ def determine_trend(row):
         and sma20 > sma50
         and sma50 > sma200
     ):
+
         return "Strong Bullish"
 
     if (
         price > sma50
         and sma50 > sma200
     ):
+
         return "Bullish"
 
     if (
@@ -513,9 +980,11 @@ def determine_trend(row):
         and sma20 < sma50
         and sma50 < sma200
     ):
+
         return "Strong Bearish"
 
     if price < sma200:
+
         return "Bearish"
 
     return "Neutral"
@@ -525,11 +994,16 @@ def determine_trend(row):
 # MOMENTUM
 # ============================================================
 
-def determine_momentum(row):
+def determine_momentum(
+    row
+):
 
     rsi = row["RSI14"]
+
     price = row["Close"]
+
     ema20 = row["EMA20"]
+
     ema50 = row["EMA50"]
 
     if any(
@@ -541,6 +1015,7 @@ def determine_momentum(row):
             ema50
         ]
     ):
+
         return "Insufficient Data"
 
     if (
@@ -548,12 +1023,14 @@ def determine_momentum(row):
         and price > ema20
         and ema20 > ema50
     ):
+
         return "Strong Positive"
 
     if (
         rsi >= 50
         and price > ema20
     ):
+
         return "Positive"
 
     if (
@@ -561,9 +1038,11 @@ def determine_momentum(row):
         and price < ema20
         and ema20 < ema50
     ):
+
         return "Strong Negative"
 
     if rsi < 50:
+
         return "Weak"
 
     return "Neutral"
@@ -573,14 +1052,27 @@ def determine_momentum(row):
 # SCORES
 # ============================================================
 
-def trend_score(trend):
+def trend_score(
+    trend
+):
 
     scores = {
-        "Strong Bullish": 100,
-        "Bullish": 80,
-        "Neutral": 50,
-        "Bearish": 25,
-        "Strong Bearish": 0
+
+        "Strong Bullish":
+            100,
+
+        "Bullish":
+            80,
+
+        "Neutral":
+            50,
+
+        "Bearish":
+            25,
+
+        "Strong Bearish":
+            0,
+
     }
 
     return scores.get(
@@ -589,14 +1081,27 @@ def trend_score(trend):
     )
 
 
-def momentum_score(momentum):
+def momentum_score(
+    momentum
+):
 
     scores = {
-        "Strong Positive": 100,
-        "Positive": 75,
-        "Neutral": 50,
-        "Weak": 25,
-        "Strong Negative": 0
+
+        "Strong Positive":
+            100,
+
+        "Positive":
+            75,
+
+        "Neutral":
+            50,
+
+        "Weak":
+            25,
+
+        "Strong Negative":
+            0,
+
     }
 
     return scores.get(
@@ -606,41 +1111,116 @@ def momentum_score(momentum):
 
 
 # ============================================================
-# INDEX ANALYSIS
+# ANALYSE INDEX
 # ============================================================
 
 def analyze_index(
     name,
-    symbol
+    symbol,
+    nse_snapshot
 ):
 
     print()
     print(
-        f"Analysing {name} ({symbol})"
+        f"Analysing {name}"
     )
+
+    # --------------------------------------------------------
+    # Historical data
+    # --------------------------------------------------------
 
     data = download_data(
         symbol
     )
 
+    # --------------------------------------------------------
+    # Official NSE snapshot
+    # --------------------------------------------------------
+
+    official = parse_nse_snapshot(
+        nse_snapshot,
+        name
+    )
+
+    # --------------------------------------------------------
+    # Merge latest NSE session
+    # --------------------------------------------------------
+
+    data = merge_nse_latest(
+        data,
+        official
+    )
+
     if data.empty:
 
         return {
-            "name": name,
-            "symbol": symbol,
-            "price": np.nan,
-            "previous_close": np.nan,
-            "daily_return_pct": np.nan,
-            "trend": "Unavailable",
-            "momentum": "Unavailable",
-            "rsi": np.nan,
-            "sma20": np.nan,
-            "sma50": np.nan,
-            "sma100": np.nan,
-            "sma200": np.nan,
-            "ema20": np.nan,
-            "ema50": np.nan,
-            "score": 50
+
+            "name":
+                name,
+
+            "symbol":
+                symbol,
+
+            "price":
+                np.nan,
+
+            "previous_close":
+                np.nan,
+
+            "daily_return_pct":
+                np.nan,
+
+            "trend":
+                "Unavailable",
+
+            "momentum":
+                "Unavailable",
+
+            "rsi":
+                np.nan,
+
+            "sma20":
+                np.nan,
+
+            "sma50":
+                np.nan,
+
+            "sma100":
+                np.nan,
+
+            "sma200":
+                np.nan,
+
+            "ema20":
+                np.nan,
+
+            "ema50":
+                np.nan,
+
+            "score":
+                50,
+
+            "data_source":
+                "Unavailable",
+
+            "data_date":
+                None,
+
+            "open":
+                np.nan,
+
+            "high":
+                np.nan,
+
+            "low":
+                np.nan,
+
+            "year_high":
+                np.nan,
+
+            "year_low":
+                np.nan,
+
         }
 
     data = calculate_indicators(
@@ -648,6 +1228,44 @@ def analyze_index(
     )
 
     latest = data.iloc[-1]
+
+    # --------------------------------------------------------
+    # Previous close
+    #
+    # IMPORTANT:
+    # This is the previous row BEFORE the official latest
+    # NSE session.
+    # --------------------------------------------------------
+
+    previous_close = np.nan
+
+    if len(data) >= 2:
+
+        previous_close = safe_float(
+            data["Close"].iloc[-2]
+        )
+
+    # --------------------------------------------------------
+    # Prefer official previous close
+    # --------------------------------------------------------
+
+    official_previous = safe_float(
+        official.get(
+            "previous_close"
+        )
+    )
+
+    if not pd.isna(
+        official_previous
+    ):
+
+        previous_close = (
+            official_previous
+        )
+
+    # --------------------------------------------------------
+    # Trend / momentum
+    # --------------------------------------------------------
 
     trend = determine_trend(
         latest
@@ -671,91 +1289,183 @@ def analyze_index(
         m_score * 0.40
     )
 
-    previous_close = np.nan
+    # --------------------------------------------------------
+    # Daily return
+    # --------------------------------------------------------
 
-    if len(data) >= 2:
+    daily_return = safe_float(
+        latest[
+            "Daily_Return_Pct"
+        ]
+    )
 
-        previous_close = float(
-            data["Close"].iloc[-2]
+    if (
+        not pd.isna(
+            official.get(
+                "percent_change"
+            )
+        )
+    ):
+
+        daily_return = (
+            official[
+                "percent_change"
+            ]
         )
 
-    def safe_float(value):
+    # --------------------------------------------------------
+    # Data date
+    # --------------------------------------------------------
 
-        try:
+    data_date = None
 
-            if pd.isna(value):
-                return np.nan
+    try:
 
-            return float(value)
+        data_date = (
+            data.index[-1]
+            .strftime(
+                "%Y-%m-%d"
+            )
+        )
 
-        except Exception:
+    except Exception:
+        pass
 
-            return np.nan
+    # --------------------------------------------------------
+    # Data source
+    # --------------------------------------------------------
+
+    if official.get(
+        "available",
+        False
+    ):
+
+        data_source = (
+            "NSE Official + "
+            "Yahoo Historical"
+        )
+
+    else:
+
+        data_source = (
+            "Yahoo Finance"
+        )
+
+    # --------------------------------------------------------
+    # Result
+    # --------------------------------------------------------
 
     return {
 
-        "name": name,
+        "name":
+            name,
 
-        "symbol": symbol,
+        "symbol":
+            symbol,
 
-        "price": safe_float(
-            latest["Close"]
-        ),
+        "price":
+            safe_float(
+                latest["Close"]
+            ),
 
         "previous_close":
             previous_close,
 
         "daily_return_pct":
+            daily_return,
+
+        "trend":
+            trend,
+
+        "momentum":
+            momentum,
+
+        "rsi":
             safe_float(
-                latest[
-                    "Daily_Return_Pct"
-                ]
+                latest["RSI14"]
             ),
 
-        "trend": trend,
+        "sma20":
+            safe_float(
+                latest["SMA20"]
+            ),
 
-        "momentum": momentum,
+        "sma50":
+            safe_float(
+                latest["SMA50"]
+            ),
 
-        "rsi": safe_float(
-            latest["RSI14"]
-        ),
+        "sma100":
+            safe_float(
+                latest["SMA100"]
+            ),
 
-        "sma20": safe_float(
-            latest["SMA20"]
-        ),
+        "sma200":
+            safe_float(
+                latest["SMA200"]
+            ),
 
-        "sma50": safe_float(
-            latest["SMA50"]
-        ),
+        "ema20":
+            safe_float(
+                latest["EMA20"]
+            ),
 
-        "sma100": safe_float(
-            latest["SMA100"]
-        ),
+        "ema50":
+            safe_float(
+                latest["EMA50"]
+            ),
 
-        "sma200": safe_float(
-            latest["SMA200"]
-        ),
+        "score":
+            round(
+                score,
+                2
+            ),
 
-        "ema20": safe_float(
-            latest["EMA20"]
-        ),
+        "open":
+            safe_float(
+                latest["Open"]
+            ),
 
-        "ema50": safe_float(
-            latest["EMA50"]
-        ),
+        "high":
+            safe_float(
+                latest["High"]
+            ),
 
-        "score": round(
-            score,
-            2
-        )
+        "low":
+            safe_float(
+                latest["Low"]
+            ),
+
+        "year_high":
+            safe_float(
+                official.get(
+                    "year_high"
+                )
+            ),
+
+        "year_low":
+            safe_float(
+                official.get(
+                    "year_low"
+                )
+            ),
+
+        "data_source":
+            data_source,
+
+        "data_date":
+            data_date,
+
     }
 
 
 # ============================================================
-# VIX
+# VIX INTERPRETATION
 # ============================================================
 
-def interpret_vix(vix):
+def interpret_vix(
+    vix
+):
 
     if pd.isna(vix):
         return "Unavailable"
@@ -787,11 +1497,17 @@ def determine_market_regime(
 ):
 
     base_score = (
+
         nifty_score * 0.40
+
         +
+
         bank_score * 0.20
+
         +
+
         breadth_score * 0.40
+
     )
 
     vix_adjustment = 0
@@ -799,20 +1515,27 @@ def determine_market_regime(
     if not pd.isna(vix):
 
         if vix >= 25:
+
             vix_adjustment = -10
 
         elif vix >= 20:
+
             vix_adjustment = -5
 
         elif vix < 12:
+
             vix_adjustment = 2
 
     market_score = (
-        base_score +
+
+        base_score
+        +
         vix_adjustment
+
     )
 
     market_score = round(
+
         max(
             0,
             min(
@@ -820,22 +1543,29 @@ def determine_market_regime(
                 market_score
             )
         ),
+
         2
+
     )
 
     if market_score >= 70:
+
         regime = "Bullish"
 
     elif market_score >= 58:
+
         regime = "Bullish but Cautious"
 
     elif market_score >= 45:
+
         regime = "Sideways"
 
     elif market_score >= 30:
+
         regime = "Weak"
 
     else:
+
         regime = "Bearish"
 
     return (
@@ -857,54 +1587,109 @@ def determine_trading_environment(
     if regime == "Bullish":
 
         return {
-            "equity": "Favorable",
-            "swing": "Favorable",
-            "breakout": "Favorable",
-            "intraday": "Favorable",
-            "options": "Selective"
+
+            "equity":
+                "Favorable",
+
+            "swing":
+                "Favorable",
+
+            "breakout":
+                "Favorable",
+
+            "intraday":
+                "Favorable",
+
+            "options":
+                "Selective",
+
         }
 
     if regime == "Bullish but Cautious":
 
         return {
-            "equity": "Selective",
-            "swing": "Selective",
-            "breakout": "Selective",
-            "intraday": "Selective",
-            "options": "Selective"
+
+            "equity":
+                "Selective",
+
+            "swing":
+                "Selective",
+
+            "breakout":
+                "Selective",
+
+            "intraday":
+                "Selective",
+
+            "options":
+                "Selective",
+
         }
 
     if regime == "Sideways":
 
         return {
-            "equity": "Selective",
-            "swing": "Selective",
-            "breakout": "Confirmation Required",
-            "intraday": "Selective",
-            "options": "Risky"
+
+            "equity":
+                "Selective",
+
+            "swing":
+                "Selective",
+
+            "breakout":
+                "Confirmation Required",
+
+            "intraday":
+                "Selective",
+
+            "options":
+                "Risky",
+
         }
 
     if regime == "Weak":
 
         return {
-            "equity": "Cautious",
-            "swing": "Cautious",
-            "breakout": "Avoid Weak Breakouts",
-            "intraday": "Selective",
-            "options": "High Risk"
+
+            "equity":
+                "Cautious",
+
+            "swing":
+                "Cautious",
+
+            "breakout":
+                "Avoid Weak Breakouts",
+
+            "intraday":
+                "Selective",
+
+            "options":
+                "High Risk",
+
         }
 
     return {
-        "equity": "Defensive",
-        "swing": "Avoid",
-        "breakout": "Avoid",
-        "intraday": "Selective",
-        "options": "Very High Risk"
+
+        "equity":
+            "Defensive",
+
+        "swing":
+            "Avoid",
+
+        "breakout":
+            "Avoid",
+
+        "intraday":
+            "Selective",
+
+        "options":
+            "Very High Risk",
+
     }
 
 
 # ============================================================
-# MAIN MARKET REGIME FUNCTION
+# MAIN MARKET FUNCTION
 # ============================================================
 
 def get_market_regime(
@@ -912,17 +1697,33 @@ def get_market_regime(
 ):
 
     print()
-    print("=" * 60)
-    print("MARKET REGIME ANALYSIS")
-    print("=" * 60)
+    print("=" * 70)
+    print("NSE SMART MARKET DASHBOARD")
+    print("MARKET REGIME ANALYSIS V2.1")
+    print("=" * 70)
 
     # --------------------------------------------------------
-    # NIFTY 50
+    # Get official NSE data FIRST
+    # --------------------------------------------------------
+
+    nse_snapshot = (
+        get_nse_index_snapshot()
+    )
+
+    # --------------------------------------------------------
+    # NIFTY
     # --------------------------------------------------------
 
     nifty = analyze_index(
+
         "NIFTY 50",
-        INDEXES["NIFTY 50"]
+
+        INDEXES[
+            "NIFTY 50"
+        ],
+
+        nse_snapshot
+
     )
 
     # --------------------------------------------------------
@@ -930,8 +1731,15 @@ def get_market_regime(
     # --------------------------------------------------------
 
     bank = analyze_index(
+
         "BANK NIFTY",
-        INDEXES["BANK NIFTY"]
+
+        INDEXES[
+            "BANK NIFTY"
+        ],
+
+        nse_snapshot
+
     )
 
     # --------------------------------------------------------
@@ -939,99 +1747,173 @@ def get_market_regime(
     # --------------------------------------------------------
 
     print()
-    print("Analysing INDIA VIX")
+    print(
+        "Analysing INDIA VIX"
+    )
+
+    vix_official = parse_nse_snapshot(
+        nse_snapshot,
+        "INDIA VIX"
+    )
 
     vix_data = download_data(
         INDEXES["INDIA VIX"],
         period="1y"
     )
 
+    vix_data = merge_nse_latest(
+        vix_data,
+        vix_official
+    )
+
     if vix_data.empty:
 
         vix = np.nan
+        vix_previous = np.nan
         vix_daily_return = np.nan
 
     else:
 
-        vix = float(
-            vix_data["Close"].iloc[-1]
+        vix = safe_float(
+            vix_data[
+                "Close"
+            ].iloc[-1]
         )
 
         if len(vix_data) >= 2:
 
-            previous_vix = float(
-                vix_data["Close"].iloc[-2]
+            vix_previous = safe_float(
+                vix_data[
+                    "Close"
+                ].iloc[-2]
             )
 
-            if previous_vix != 0:
+        else:
 
-                vix_daily_return = (
-                    (
-                        vix -
-                        previous_vix
-                    )
-                    /
-                    previous_vix
-                    *
-                    100
+            vix_previous = np.nan
+
+        if (
+            not pd.isna(
+                vix_previous
+            )
+            and vix_previous != 0
+        ):
+
+            vix_daily_return = (
+
+                (
+                    vix
+                    -
+                    vix_previous
                 )
+                /
+                vix_previous
+                *
+                100
 
-            else:
-
-                vix_daily_return = np.nan
+            )
 
         else:
 
             vix_daily_return = np.nan
 
-    vix_interpretation = interpret_vix(
-        vix
+    official_vix_change = safe_float(
+        vix_official.get(
+            "percent_change"
+        )
+    )
+
+    if not pd.isna(
+        official_vix_change
+    ):
+
+        vix_daily_return = (
+            official_vix_change
+        )
+
+    vix_interpretation = (
+        interpret_vix(vix)
     )
 
     # --------------------------------------------------------
-    # MARKET BREADTH
+    # Breadth
     # --------------------------------------------------------
 
     if breadth:
 
-        breadth_score = float(
+        breadth_score = safe_float(
+
             breadth.get(
                 "breadth_score",
                 50
             )
+
         )
+
+        if pd.isna(
+            breadth_score
+        ):
+
+            breadth_score = 50.0
 
     else:
 
         breadth_score = 50.0
 
     # --------------------------------------------------------
-    # MARKET REGIME
+    # Market regime
     # --------------------------------------------------------
 
     regime, market_score = (
         determine_market_regime(
+
             nifty["score"],
+
             bank["score"],
+
             breadth_score,
+
             vix
+
         )
     )
 
     # --------------------------------------------------------
-    # TRADING ENVIRONMENT
+    # Environment
     # --------------------------------------------------------
 
-    trading_environment = (
+    environment = (
         determine_trading_environment(
+
             regime,
+
             breadth_score,
+
             vix
+
         )
     )
 
     # --------------------------------------------------------
-    # RESULT
+    # Market date
+    # --------------------------------------------------------
+
+    market_date = (
+
+        nifty.get(
+            "data_date"
+        )
+
+        or
+
+        bank.get(
+            "data_date"
+        )
+
+    )
+
+    # --------------------------------------------------------
+    # Result
     # --------------------------------------------------------
 
     result = {
@@ -1051,33 +1933,66 @@ def get_market_regime(
         "breadth_score":
             breadth_score,
 
+        # ----------------------------------------------------
+        # VIX
+        # ----------------------------------------------------
+
         "vix":
-            round(vix, 2)
-            if not pd.isna(vix)
-            else None,
+            None
+            if pd.isna(vix)
+            else round(
+                vix,
+                2
+            ),
+
+        "vix_previous_close":
+            None
+            if pd.isna(
+                vix_previous
+            )
+            else round(
+                vix_previous,
+                2
+            ),
 
         "vix_daily_return_pct":
-            round(
-                vix_daily_return,
-                2
-            )
-            if not pd.isna(
+            None
+            if pd.isna(
                 vix_daily_return
             )
-            else None,
+            else round(
+                vix_daily_return,
+                2
+            ),
 
         "vix_interpretation":
             vix_interpretation,
 
+        # ----------------------------------------------------
         # NIFTY
+        # ----------------------------------------------------
+
         "nifty_price":
             nifty["price"],
 
         "nifty_previous_close":
-            nifty["previous_close"],
+            nifty[
+                "previous_close"
+            ],
 
         "nifty_daily_return_pct":
-            nifty["daily_return_pct"],
+            nifty[
+                "daily_return_pct"
+            ],
+
+        "nifty_open":
+            nifty["open"],
+
+        "nifty_high":
+            nifty["high"],
+
+        "nifty_low":
+            nifty["low"],
 
         "nifty_trend":
             nifty["trend"],
@@ -1106,15 +2021,31 @@ def get_market_regime(
         "nifty_ema50":
             nifty["ema50"],
 
+        # ----------------------------------------------------
         # BANK NIFTY
+        # ----------------------------------------------------
+
         "bank_nifty_price":
             bank["price"],
 
         "bank_nifty_previous_close":
-            bank["previous_close"],
+            bank[
+                "previous_close"
+            ],
 
         "bank_nifty_daily_return_pct":
-            bank["daily_return_pct"],
+            bank[
+                "daily_return_pct"
+            ],
+
+        "bank_nifty_open":
+            bank["open"],
+
+        "bank_nifty_high":
+            bank["high"],
+
+        "bank_nifty_low":
+            bank["low"],
 
         "bank_nifty_trend":
             bank["trend"],
@@ -1143,21 +2074,66 @@ def get_market_regime(
         "bank_nifty_ema50":
             bank["ema50"],
 
+        # ----------------------------------------------------
+        # DATA QUALITY
+        # ----------------------------------------------------
+
+        "market_data_date":
+            market_date,
+
+        "nifty_data_source":
+            nifty[
+                "data_source"
+            ],
+
+        "bank_nifty_data_source":
+            bank[
+                "data_source"
+            ],
+
+        "vix_data_source":
+            (
+                "NSE Official + "
+                "Yahoo Historical"
+                if vix_official.get(
+                    "available",
+                    False
+                )
+                else "Yahoo Finance"
+            ),
+
+        "market_data_authority":
+            "NSE Official",
+
+        # ----------------------------------------------------
         # ENVIRONMENTS
+        # ----------------------------------------------------
+
         "equity_environment":
-            trading_environment["equity"],
+            environment[
+                "equity"
+            ],
 
         "swing_environment":
-            trading_environment["swing"],
+            environment[
+                "swing"
+            ],
 
         "breakout_environment":
-            trading_environment["breakout"],
+            environment[
+                "breakout"
+            ],
 
         "intraday_environment":
-            trading_environment["intraday"],
+            environment[
+                "intraday"
+            ],
 
         "options_environment":
-            trading_environment["options"]
+            environment[
+                "options"
+            ],
+
     }
 
     display_market(
@@ -1179,9 +2155,19 @@ def display_market(
         return
 
     print()
-    print("=" * 60)
+    print("=" * 70)
     print("MARKET REGIME SUMMARY")
-    print("=" * 60)
+    print("=" * 70)
+
+    print(
+        f"Market Date          : "
+        f"{market.get('market_data_date')}"
+    )
+
+    print(
+        f"Market Data Authority: "
+        f"{market.get('market_data_authority')}"
+    )
 
     print(
         f"Market Regime        : "
@@ -1193,69 +2179,68 @@ def display_market(
         f"{market.get('market_score')}"
     )
 
+    print()
     print(
-        f"NIFTY 50 Price       : "
+        f"NIFTY Last Close     : "
         f"{market.get('nifty_price')}"
     )
 
     print(
-        f"NIFTY 50 Change      : "
+        f"NIFTY Previous Close : "
+        f"{market.get('nifty_previous_close')}"
+    )
+
+    print(
+        f"NIFTY Change %       : "
         f"{market.get('nifty_daily_return_pct')}"
     )
 
     print(
-        f"NIFTY 50 Trend       : "
-        f"{market.get('nifty_trend')}"
+        f"NIFTY Data Source    : "
+        f"{market.get('nifty_data_source')}"
     )
 
+    print()
     print(
-        f"NIFTY 50 Momentum    : "
-        f"{market.get('nifty_momentum')}"
-    )
-
-    print(
-        f"NIFTY 50 RSI         : "
-        f"{market.get('nifty_rsi')}"
-    )
-
-    print(
-        f"BANK NIFTY Price     : "
+        f"BANK Last Close      : "
         f"{market.get('bank_nifty_price')}"
     )
 
     print(
-        f"BANK NIFTY Change    : "
+        f"BANK Previous Close  : "
+        f"{market.get('bank_nifty_previous_close')}"
+    )
+
+    print(
+        f"BANK Change %        : "
         f"{market.get('bank_nifty_daily_return_pct')}"
     )
 
     print(
-        f"BANK NIFTY Trend     : "
-        f"{market.get('bank_nifty_trend')}"
+        f"BANK Data Source     : "
+        f"{market.get('bank_nifty_data_source')}"
     )
 
-    print(
-        f"BANK NIFTY Momentum  : "
-        f"{market.get('bank_nifty_momentum')}"
-    )
-
-    print(
-        f"BANK NIFTY RSI       : "
-        f"{market.get('bank_nifty_rsi')}"
-    )
-
-    print(
-        f"Breadth Score        : "
-        f"{market.get('breadth_score')}"
-    )
-
+    print()
     print(
         f"India VIX            : "
         f"{market.get('vix')}"
     )
 
     print(
+        f"VIX Change %         : "
+        f"{market.get('vix_daily_return_pct')}"
+    )
+
+    print(
         f"VIX Interpretation   : "
         f"{market.get('vix_interpretation')}"
+    )
+
+    print()
+    print(
+        f"Breadth Score        : "
+        f"{market.get('breadth_score')}"
     )
 
     print()
@@ -1284,7 +2269,7 @@ def display_market(
         f"{market.get('options_environment')}"
     )
 
-    print("=" * 60)
+    print("=" * 70)
 
 
 # ============================================================
