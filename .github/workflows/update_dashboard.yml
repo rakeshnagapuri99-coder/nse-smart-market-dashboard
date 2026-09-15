@@ -4,18 +4,28 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Monday to Friday
+    # Monday-Friday
     # 13:00 UTC = 18:30 IST
     - cron: "0 13 * * 1-5"
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "nse-dashboard"
+  cancel-in-progress: false
 
 jobs:
 
-  update-dashboard:
+  update-and-deploy:
 
     runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
 
@@ -25,7 +35,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v5
-
 
       # ------------------------------------------------------
       # 2. Python
@@ -37,16 +46,14 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-
       # ------------------------------------------------------
-      # 3. Install dependencies
+      # 3. Dependencies
       # ------------------------------------------------------
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
 
       # ------------------------------------------------------
       # 4. Run production scanner
@@ -56,62 +63,68 @@ jobs:
         run: |
           python scanner.py
 
-
       # ------------------------------------------------------
-      # 5. Verify dashboard data
+      # 5. Verify production output
       # ------------------------------------------------------
 
       - name: Verify dashboard output
         run: |
 
           echo "======================================"
-          echo "DASHBOARD OUTPUT"
+          echo "VERIFYING DASHBOARD OUTPUT"
           echo "======================================"
 
-          if [ ! -f output/dashboard_data.json ]; then
-            echo "Dashboard JSON was not created"
-            exit 1
-          fi
+          required_files=(
+            "output/dashboard_data.json"
+            "output/stocks.csv"
+            "output/market_regime.csv"
+            "output/market_breadth.csv"
+            "output/sector_analysis.csv"
+          )
 
-          if [ ! -f output/stocks.csv ]; then
-            echo "Stocks CSV was not created"
-            exit 1
-          fi
+          for file in "${required_files[@]}"; do
 
-          if [ ! -f output/market_regime.csv ]; then
-            echo "Market regime CSV was not created"
-            exit 1
-          fi
+            if [ ! -f "$file" ]; then
 
-          if [ ! -f output/market_breadth.csv ]; then
-            echo "Market breadth CSV was not created"
-            exit 1
-          fi
+              echo "ERROR: Missing $file"
+              exit 1
+
+            fi
+
+            echo "OK: $file"
+
+          done
 
           echo ""
-          echo "Dashboard files created successfully."
+          echo "Dashboard output verified."
 
           echo ""
           echo "Output directory:"
           ls -lah output
 
+          echo ""
+          echo "Excel exports:"
+          ls -lah output/exports || true
 
       # ------------------------------------------------------
-      # 6. Commit generated data
+      # 6. Commit market data
       # ------------------------------------------------------
 
-      - name: Commit updated dashboard data
+      - name: Commit updated market data
         run: |
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name \
+            "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/
           git add output/
 
           if git diff --cached --quiet; then
 
-            echo "No dashboard data changes detected."
+            echo "No market-data changes detected."
 
           else
 
@@ -121,3 +134,62 @@ jobs:
             git push
 
           fi
+
+      # ------------------------------------------------------
+      # 7. Configure GitHub Pages
+      # ------------------------------------------------------
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      # ------------------------------------------------------
+      # 8. Prepare static website
+      # ------------------------------------------------------
+
+      - name: Prepare Pages site
+        run: |
+
+          rm -rf site
+
+          mkdir -p site
+          mkdir -p site/assets
+          mkdir -p site/output
+          mkdir -p site/output/exports
+
+          # Main dashboard
+          cp index.html site/
+
+          # Dashboard assets
+          cp assets/dashboard.css site/assets/
+          cp assets/dashboard.js site/assets/
+          cp assets/portfolio.js site/assets/
+
+          # Dashboard data
+          cp output/dashboard_data.json \
+             site/output/
+
+          # Excel exports
+          cp output/exports/*.xlsx \
+             site/output/exports/ \
+             2>/dev/null || true
+
+          echo ""
+          echo "Pages site:"
+          find site -maxdepth 3 -type f | sort
+
+      # ------------------------------------------------------
+      # 9. Upload Pages artifact
+      # ------------------------------------------------------
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      # ------------------------------------------------------
+      # 10. Deploy
+      # ------------------------------------------------------
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
