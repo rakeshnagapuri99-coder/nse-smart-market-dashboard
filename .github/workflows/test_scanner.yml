@@ -22,6 +22,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run scanner test
+      - name: Run batch scanner
         run: |
           python scanner.py
+
+      - name: Show generated files
+        run: |
+          echo "======================================"
+          echo "OUTPUT FILES"
+          echo "======================================"
+          ls -lah output
+
+      - name: Show CSV preview
+        run: |
+          echo "======================================"
+          echo "TECHNICAL SCAN CSV"
+          echo "======================================"
+          if [ -f output/technical_scan_test.csv ]; then
+            head -10 output/technical_scan_test.csv
+          else
+            echo "CSV file was not created"
+            exit 1
+          fi
