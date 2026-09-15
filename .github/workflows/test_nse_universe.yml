@@ -1,0 +1,44 @@
+name: Test NSE Universe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test NSE universe
+        run: |
+          python test_nse_universe.py
+
+      - name: Show generated universe
+        run: |
+          echo "======================================"
+          echo "NSE UNIVERSE FILE"
+          echo "======================================"
+
+          if [ -f data/nse_universe.csv ]; then
+            echo "File created successfully"
+            echo "--------------------------------------"
+            wc -l data/nse_universe.csv
+            echo "--------------------------------------"
+            head -10 data/nse_universe.csv
+          else
+            echo "NSE universe CSV was not created"
+            exit 1
+          fi
