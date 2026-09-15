@@ -4,201 +4,142 @@ import numpy as np
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# RANKING & SETUP ENGINE
+# RANKING ENGINE — PRODUCTION V2
 # ============================================================
 
 
 # ============================================================
-# TECHNICAL SCORE COMPONENTS
+# TECHNICAL SCORING
 # ============================================================
 
-def trend_score(row):
-    """
-    Score the broad price trend.
-    Maximum: 20 points
-    """
-
-    trend = row.get("trend", "")
+def calculate_trend_score(trend):
 
     scores = {
         "Strong Uptrend": 20,
         "Uptrend": 16,
         "Sideways": 8,
         "Downtrend": 3,
-        "Strong Downtrend": 0,
-        "Insufficient Data": 0
+        "Strong Downtrend": 0
     }
 
-    return scores.get(
-        trend,
-        0
-    )
+    return scores.get(trend, 5)
 
 
-def momentum_score(row):
-    """
-    Score price momentum.
-    Maximum: 15 points
-    """
-
-    momentum = row.get(
-        "momentum",
-        ""
-    )
+def calculate_momentum_score(momentum):
 
     scores = {
         "Strong Positive": 15,
         "Positive": 11,
         "Neutral": 7,
         "Negative": 3,
-        "Strong Negative": 0,
-        "Insufficient Data": 0
+        "Strong Negative": 0
     }
 
-    return scores.get(
-        momentum,
-        0
-    )
+    return scores.get(momentum, 4)
 
 
-def rsi_score(row):
-    """
-    Score RSI.
-
-    We don't blindly reward a high RSI.
-    Extremely overbought conditions receive
-    a lower score.
-    """
-
-    rsi = row.get(
-        "rsi14",
-        np.nan
-    )
+def calculate_rsi_score(rsi):
 
     if pd.isna(rsi):
-        return 0
+        return 5
 
     if 55 <= rsi <= 68:
         return 15
 
-    elif 50 <= rsi < 55:
+    if 50 <= rsi < 55:
         return 12
 
-    elif 68 < rsi <= 72:
+    if 68 < rsi <= 72:
         return 11
 
-    elif 45 <= rsi < 50:
+    if 45 <= rsi < 50:
         return 8
 
-    elif 40 <= rsi < 45:
+    if 40 <= rsi < 45:
         return 5
 
-    elif rsi > 72:
+    if rsi > 72:
         return 7
 
-    else:
-        return 2
+    return 2
 
 
-def volume_score(row):
-    """
-    Score volume confirmation.
-    Maximum: 15 points
-    """
+def calculate_volume_score(volume_ratio):
 
-    ratio = row.get(
-        "volume_ratio",
-        np.nan
-    )
+    if pd.isna(volume_ratio):
+        return 5
 
-    if pd.isna(ratio):
-        return 0
-
-    if ratio >= 2.0:
+    if volume_ratio >= 2:
         return 15
 
-    elif ratio >= 1.5:
+    if volume_ratio >= 1.5:
         return 13
 
-    elif ratio >= 1.25:
+    if volume_ratio >= 1.25:
         return 10
 
-    elif ratio >= 1.0:
+    if volume_ratio >= 1:
         return 7
 
-    elif ratio >= 0.75:
+    if volume_ratio >= 0.75:
         return 4
 
-    else:
-        return 1
+    return 1
 
 
-def position_score(row):
-    """
-    Score price position relative to 200 DMA
-    and 52-week high.
-
-    Maximum: 15 points
-    """
+def calculate_position_score(row):
 
     score = 0
 
-    above_200dma = row.get(
-        "above_200dma",
-        False
-    )
+    price = row.get("price", np.nan)
+
+    sma200 = row.get("sma200", np.nan)
 
     distance_high = row.get(
         "distance_from_52w_high_pct",
         np.nan
     )
 
-    if above_200dma:
+    if (
+        not pd.isna(price)
+        and not pd.isna(sma200)
+        and price > sma200
+    ):
         score += 8
 
     if not pd.isna(distance_high):
 
-        # Near 52-week high
-        if -2 <= distance_high <= 0:
+        if distance_high >= -3:
             score += 7
 
-        elif -5 <= distance_high < -2:
-            score += 6
+        elif distance_high >= -7:
+            score += 5
 
-        elif -10 <= distance_high < -5:
-            score += 4
+        elif distance_high >= -12:
+            score += 3
 
-        elif -20 <= distance_high < -10:
-            score += 2
+    return score
 
-    return min(
-        score,
-        15
+
+def calculate_breakout_score(
+    breakout_status
+):
+
+    scores = {
+
+        "Confirmed Breakout": 20,
+
+        "Breakout - Volume Confirmation Required": 14,
+
+        "Near Breakout": 10,
+
+        "No Breakout": 4
+    }
+
+    return scores.get(
+        breakout_status,
+        4
     )
-
-
-def breakout_score(row):
-    """
-    Score breakout conditions.
-    Maximum: 20 points
-    """
-
-    status = row.get(
-        "breakout_status",
-        ""
-    )
-
-    if status == "Confirmed Breakout":
-        return 20
-
-    elif status == "Breakout - Volume Confirmation Required":
-        return 14
-
-    elif status == "Near Breakout":
-        return 10
-
-    else:
-        return 4
 
 
 # ============================================================
@@ -206,26 +147,191 @@ def breakout_score(row):
 # ============================================================
 
 def calculate_technical_score(row):
-    """
-    Calculate technical score out of 100.
 
-    Components:
+    trend = calculate_trend_score(
+        row.get("trend")
+    )
 
-    Trend       = 20
-    Momentum    = 15
-    RSI         = 15
-    Volume      = 15
-    Position    = 15
-    Breakout    = 20
-    """
+    momentum = calculate_momentum_score(
+        row.get("momentum")
+    )
+
+    rsi = calculate_rsi_score(
+        row.get("rsi14", np.nan)
+    )
+
+    volume = calculate_volume_score(
+        row.get("volume_ratio", np.nan)
+    )
+
+    position = calculate_position_score(
+        row
+    )
+
+    breakout = calculate_breakout_score(
+        row.get("breakout_status")
+    )
 
     score = (
-        trend_score(row)
-        + momentum_score(row)
-        + rsi_score(row)
-        + volume_score(row)
-        + position_score(row)
-        + breakout_score(row)
+        trend
+        + momentum
+        + rsi
+        + volume
+        + position
+        + breakout
+    )
+
+    return round(
+        max(0, min(100, score)),
+        2
+    )
+
+
+# ============================================================
+# SECTOR CONTEXT
+# ============================================================
+
+def calculate_sector_context(
+    sector_classification
+):
+
+    scores = {
+
+        "Leading": 100,
+
+        "Strong": 80,
+
+        "Neutral": 60,
+
+        "Weak": 40,
+
+        "Lagging": 20
+    }
+
+    return scores.get(
+        sector_classification,
+        50
+    )
+
+
+def calculate_sector_adjustment(
+    sector_score
+):
+
+    if pd.isna(sector_score):
+        return 0
+
+    if sector_score >= 75:
+        return 5
+
+    if sector_score >= 60:
+        return 3
+
+    if sector_score >= 45:
+        return 0
+
+    if sector_score >= 30:
+        return -3
+
+    return -5
+
+
+# ============================================================
+# FUNDAMENTAL SCORE
+# ============================================================
+
+def calculate_fundamental_score(row):
+
+    # --------------------------------------------------------
+    # Fundamentals are not yet connected to the scanner.
+    #
+    # Therefore we DO NOT invent a score.
+    #
+    # Once fundamental_engine.py is connected, this function
+    # will calculate the actual 40-point fundamental component.
+    # --------------------------------------------------------
+
+    required_fields = [
+        "roe",
+        "roce",
+        "revenue_cagr",
+        "profit_cagr",
+        "debt_equity",
+        "pe"
+    ]
+
+    available = 0
+
+    for field in required_fields:
+
+        value = row.get(
+            field,
+            np.nan
+        )
+
+        if (
+            value is not None
+            and not pd.isna(value)
+        ):
+            available += 1
+
+    if available == 0:
+
+        return np.nan
+
+    # Temporary neutral score when partial
+    # fundamental information exists.
+    return 50.0
+
+
+# ============================================================
+# OVERALL RATING
+# ============================================================
+
+def calculate_overall_rating(
+    technical_score,
+    fundamental_score,
+    sector_score
+):
+
+    # --------------------------------------------------------
+    # Fundamentals unavailable
+    # --------------------------------------------------------
+
+    if pd.isna(fundamental_score):
+
+        # Current production stage:
+        # Technical score remains primary.
+        #
+        # Sector context contributes a small adjustment.
+
+        adjustment = calculate_sector_adjustment(
+            sector_score
+        )
+
+        return round(
+            max(
+                0,
+                min(
+                    100,
+                    technical_score
+                    + adjustment
+                )
+            ),
+            2
+        )
+
+    # --------------------------------------------------------
+    # Fundamentals available
+    # --------------------------------------------------------
+
+    base_score = (
+        technical_score * 0.60
+        + fundamental_score * 0.40
+    )
+
+    adjustment = calculate_sector_adjustment(
+        sector_score
     )
 
     return round(
@@ -233,7 +339,8 @@ def calculate_technical_score(row):
             0,
             min(
                 100,
-                score
+                base_score
+                + adjustment
             )
         ),
         2
@@ -241,35 +348,35 @@ def calculate_technical_score(row):
 
 
 # ============================================================
-# SETUP DETECTION
+# SETUP CLASSIFICATION
 # ============================================================
 
-def identify_setup(row):
-    """
-    Identify the most relevant trading setup.
+def determine_setup(row):
 
-    Priority is given to stronger price-action
-    conditions first.
-    """
-
-    trend = row.get(
-        "trend",
-        ""
+    trend = str(
+        row.get(
+            "trend",
+            ""
+        )
     )
 
-    momentum = row.get(
-        "momentum",
-        ""
+    momentum = str(
+        row.get(
+            "momentum",
+            ""
+        )
     )
 
-    breakout = row.get(
-        "breakout_status",
-        ""
+    breakout = str(
+        row.get(
+            "breakout_status",
+            ""
+        )
     )
 
-    above_200dma = row.get(
-        "above_200dma",
-        False
+    distance_200 = row.get(
+        "distance_from_200dma_pct",
+        np.nan
     )
 
     distance_high = row.get(
@@ -277,101 +384,106 @@ def identify_setup(row):
         np.nan
     )
 
-    rsi = row.get(
-        "rsi14",
-        np.nan
+    technical_score = row.get(
+        "technical_score",
+        0
     )
 
-    volume_ratio = row.get(
-        "volume_ratio",
-        np.nan
-    )
 
     # --------------------------------------------------------
-    # Confirmed Breakout
+    # Strong confirmed breakout
     # --------------------------------------------------------
 
     if (
         breakout == "Confirmed Breakout"
-        and volume_ratio >= 1.5
+        and technical_score >= 65
     ):
+
         return "Strong Breakout Watch"
 
+
     # --------------------------------------------------------
-    # Near 52W High
+    # 52 Week High
     # --------------------------------------------------------
 
     if (
-        above_200dma
-        and not pd.isna(distance_high)
-        and distance_high >= -5
-        and trend in [
-            "Strong Uptrend",
-            "Uptrend"
-        ]
+        not pd.isna(distance_high)
+        and distance_high >= -3
+        and technical_score >= 55
     ):
+
         return "52W High Watch"
 
+
     # --------------------------------------------------------
-    # Momentum Setup
+    # Momentum
     # --------------------------------------------------------
 
     if (
-        trend in [
-            "Strong Uptrend",
-            "Uptrend"
-        ]
-        and momentum in [
-            "Strong Positive",
-            "Positive"
-        ]
-        and volume_ratio >= 1.25
+        momentum == "Strong Positive"
+        and technical_score >= 55
     ):
+
         return "Momentum Watch"
 
-    # --------------------------------------------------------
-    # 200 DMA Recovery
-    # --------------------------------------------------------
-
-    distance_200 = row.get(
-        "distance_from_200dma_pct",
-        np.nan
-    )
-
-    if not pd.isna(distance_200):
-
-        if (
-            -3 <= distance_200 <= 3
-            and rsi >= 45
-        ):
-            return "200 DMA Recovery Watch"
 
     # --------------------------------------------------------
-    # Breakout Confirmation Required
+    # 200 DMA recovery
     # --------------------------------------------------------
 
     if (
-        breakout ==
-        "Breakout - Volume Confirmation Required"
+        not pd.isna(distance_200)
+        and -5 <= distance_200 <= 5
+        and momentum
+        in [
+            "Positive",
+            "Strong Positive"
+        ]
     ):
+
+        return "200 DMA Recovery Watch"
+
+
+    # --------------------------------------------------------
+    # Breakout confirmation
+    # --------------------------------------------------------
+
+    if (
+        breakout
+        == "Breakout - Volume Confirmation Required"
+    ):
+
         return "Breakout Confirmation Required"
 
+
     # --------------------------------------------------------
-    # Near Breakout
+    # Pre-breakout
     # --------------------------------------------------------
 
-    if breakout == "Near Breakout":
+    if (
+        breakout == "Near Breakout"
+        and technical_score >= 45
+    ):
+
         return "Pre-Breakout Watch"
 
+
     # --------------------------------------------------------
-    # Weak Conditions
+    # Weak / avoid
     # --------------------------------------------------------
 
-    if trend in [
-        "Strong Downtrend",
-        "Downtrend"
-    ]:
+    if (
+        technical_score < 30
+        or trend
+        in [
+            "Strong Downtrend",
+            "Strong Bearish",
+            "Strong Downtrend"
+        ]
+    ):
+
         return "Weak / Avoid"
+
 
     return "Neutral Watch"
 
@@ -381,21 +493,28 @@ def identify_setup(row):
 # ============================================================
 
 def generate_reasons(row):
-    """
-    Generate human-readable reasons explaining
-    why the stock received its setup.
-    """
 
     reasons = []
 
-    trend = row.get(
-        "trend",
-        ""
+    trend = str(
+        row.get(
+            "trend",
+            ""
+        )
     )
 
-    momentum = row.get(
-        "momentum",
-        ""
+    momentum = str(
+        row.get(
+            "momentum",
+            ""
+        )
+    )
+
+    breakout = str(
+        row.get(
+            "breakout_status",
+            ""
+        )
     )
 
     rsi = row.get(
@@ -408,9 +527,9 @@ def generate_reasons(row):
         np.nan
     )
 
-    above_200dma = row.get(
-        "above_200dma",
-        False
+    distance_200 = row.get(
+        "distance_from_200dma_pct",
+        np.nan
     )
 
     distance_high = row.get(
@@ -418,172 +537,142 @@ def generate_reasons(row):
         np.nan
     )
 
-    breakout = row.get(
-        "breakout_status",
-        ""
-    )
-
-    distance_200 = row.get(
-        "distance_from_200dma_pct",
-        np.nan
-    )
-
-    # --------------------------------------------------------
     # Trend
-    # --------------------------------------------------------
+    if trend in [
+        "Strong Uptrend",
+        "Strong Bullish"
+    ]:
 
-    if trend == "Strong Uptrend":
         reasons.append(
-            "Price is in a strong uptrend"
-        )
-
-    elif trend == "Uptrend":
-        reasons.append(
-            "Price is above major moving averages"
+            "Strong price trend"
         )
 
     elif trend in [
-        "Downtrend",
-        "Strong Downtrend"
+        "Uptrend",
+        "Bullish"
     ]:
+
         reasons.append(
-            "Price trend is weak"
+            "Positive price trend"
         )
 
-    # --------------------------------------------------------
-    # Momentum
-    # --------------------------------------------------------
+    elif trend in [
+        "Strong Downtrend",
+        "Strong Bearish"
+    ]:
 
+        reasons.append(
+            "Strong negative trend"
+        )
+
+    # Momentum
     if momentum == "Strong Positive":
+
         reasons.append(
             "Strong positive momentum"
         )
 
     elif momentum == "Positive":
+
         reasons.append(
             "Positive momentum"
         )
 
     elif momentum in [
-        "Negative",
         "Strong Negative"
     ]:
+
         reasons.append(
-            "Negative momentum"
+            "Strong negative momentum"
         )
 
-    # --------------------------------------------------------
     # RSI
-    # --------------------------------------------------------
-
     if not pd.isna(rsi):
 
-        if 55 <= rsi <= 68:
+        if 50 <= rsi <= 68:
+
             reasons.append(
-                "RSI supports bullish momentum"
+                "RSI in constructive range"
             )
 
-        elif rsi < 35:
+        elif rsi > 70:
+
             reasons.append(
-                "RSI indicates oversold conditions"
+                "RSI elevated"
             )
 
-        elif rsi > 72:
+        elif rsi < 40:
+
             reasons.append(
-                "RSI is highly extended"
+                "RSI indicates weakness"
             )
 
-    # --------------------------------------------------------
     # Volume
-    # --------------------------------------------------------
-
     if not pd.isna(volume_ratio):
 
-        if volume_ratio >= 2:
+        if volume_ratio >= 1.5:
+
             reasons.append(
-                "Volume is more than 2x average"
+                "Strong volume participation"
             )
 
-        elif volume_ratio >= 1.5:
-            reasons.append(
-                "Strong volume confirmation"
-            )
+        elif volume_ratio >= 1.2:
 
-        elif volume_ratio >= 1.25:
             reasons.append(
                 "Above-average volume"
             )
 
-    # --------------------------------------------------------
     # 200 DMA
-    # --------------------------------------------------------
+    if not pd.isna(distance_200):
 
-    if above_200dma:
-        reasons.append(
-            "Price is above 200 DMA"
-        )
-    else:
-        reasons.append(
-            "Price is below 200 DMA"
-        )
+        if distance_200 > 0:
 
-    # --------------------------------------------------------
-    # 52W High
-    # --------------------------------------------------------
+            reasons.append(
+                "Price above 200 DMA"
+            )
 
+        elif -5 <= distance_200 <= 0:
+
+            reasons.append(
+                "Near 200 DMA"
+            )
+
+        else:
+
+            reasons.append(
+                "Price below 200 DMA"
+            )
+
+    # 52W high
     if not pd.isna(distance_high):
 
-        if -2 <= distance_high <= 0:
+        if distance_high >= -3:
+
             reasons.append(
-                "Very close to 52-week high"
+                "Near 52-week high"
             )
 
-        elif -5 <= distance_high < -2:
-            reasons.append(
-                "Within 5% of 52-week high"
-            )
-
-    # --------------------------------------------------------
     # Breakout
-    # --------------------------------------------------------
-
     if breakout == "Confirmed Breakout":
+
         reasons.append(
-            "Price broke previous resistance"
+            "Breakout with volume confirmation"
         )
 
     elif breakout == "Near Breakout":
+
         reasons.append(
-            "Price is near resistance"
+            "Price approaching resistance"
         )
 
-    # --------------------------------------------------------
-    # 200 DMA Recovery
-    # --------------------------------------------------------
-
-    if not pd.isna(distance_200):
-
-        if -3 <= distance_200 <= 3:
-            reasons.append(
-                "Price is near 200 DMA"
-            )
-
-    return " | ".join(
-        reasons
-    )
+    return reasons
 
 
 # ============================================================
-# RISK / REWARD
+# SUPPORT / RESISTANCE
 # ============================================================
 
 def calculate_risk_reward(row):
-    """
-    Estimate basic risk/reward using support
-    and resistance.
-
-    This is NOT an execution signal.
-    """
 
     price = row.get(
         "price",
@@ -605,6 +694,7 @@ def calculate_risk_reward(row):
         or pd.isna(support)
         or pd.isna(resistance)
     ):
+
         return np.nan
 
     risk = price - support
@@ -612,6 +702,7 @@ def calculate_risk_reward(row):
     reward = resistance - price
 
     if risk <= 0:
+
         return np.nan
 
     return round(
@@ -621,215 +712,482 @@ def calculate_risk_reward(row):
 
 
 # ============================================================
-# PROCESS ONE ROW
+# NORMALIZE STOCK DATA
 # ============================================================
 
-def rank_stock(row):
-    """
-    Add all ranking and setup fields
-    to one stock.
-    """
+def normalize_stock_columns(df):
 
-    row = row.copy()
-
-    technical = calculate_technical_score(
-        row
-    )
-
-    setup = identify_setup(
-        row
-    )
-
-    reasons = generate_reasons(
-        row
-    )
-
-    risk_reward = calculate_risk_reward(
-        row
-    )
-
-    row["technical_score"] = technical
-
-    row["setup"] = setup
-
-    row["setup_reasons"] = reasons
-
-    row["risk_reward"] = risk_reward
-
-    return row
-
-
-# ============================================================
-# RANK COMPLETE DATAFRAME
-# ============================================================
-
-def rank_stocks(df):
-    """
-    Rank all scanned stocks.
-
-    Higher technical score = higher rank.
-    """
-
-    if df is None or df.empty:
-        return pd.DataFrame()
+    if df.empty:
+        return df
 
     df = df.copy()
 
-    df = df.apply(
-        rank_stock,
+    # --------------------------------------------------------
+    # Technical engine uses capitalized field names.
+    # Convert to dashboard-friendly lowercase names.
+    # --------------------------------------------------------
+
+    rename_map = {
+
+        "Close": "price",
+
+        "SMA20": "sma20",
+
+        "SMA50": "sma50",
+
+        "SMA100": "sma100",
+
+        "SMA200": "sma200",
+
+        "EMA9": "ema9",
+
+        "EMA20": "ema20",
+
+        "EMA50": "ema50",
+
+        "RSI14": "rsi14",
+
+        "ATR14": "atr14",
+
+        "ATR_Percent": "atr_percent",
+
+        "Volume": "volume",
+
+        "Average_Volume_20":
+            "average_volume_20",
+
+        "Volume_Ratio":
+            "volume_ratio",
+
+        "52W_High":
+            "52w_high",
+
+        "52W_Low":
+            "52w_low",
+
+        "Distance_From_52W_High_Pct":
+            "distance_from_52w_high_pct",
+
+        "Distance_From_52W_Low_Pct":
+            "distance_from_52w_low_pct",
+
+        "Distance_From_200DMA_Pct":
+            "distance_from_200dma_pct",
+
+        "Support":
+            "support",
+
+        "Resistance":
+            "resistance",
+
+        "Trend":
+            "trend",
+
+        "Momentum":
+            "momentum",
+
+        "Breakout_Status":
+            "breakout_status"
+    }
+
+    df = df.rename(
+        columns=rename_map
+    )
+
+    return df
+
+
+# ============================================================
+# RANK STOCKS
+# ============================================================
+
+def rank_stocks(
+    stock_data,
+    sector_data=None
+):
+
+    if (
+        stock_data is None
+        or stock_data.empty
+    ):
+
+        return pd.DataFrame()
+
+
+    df = normalize_stock_columns(
+        stock_data
+    )
+
+
+    # --------------------------------------------------------
+    # Sector mapping
+    # --------------------------------------------------------
+
+    if (
+        sector_data is not None
+        and not sector_data.empty
+        and "sector" in df.columns
+    ):
+
+        sector_columns = [
+            "sector",
+            "sector_score",
+            "classification"
+        ]
+
+        available_columns = [
+            column
+            for column in sector_columns
+            if column in sector_data.columns
+        ]
+
+        if len(available_columns) >= 2:
+
+            sector_lookup = (
+                sector_data[
+                    available_columns
+                ]
+                .drop_duplicates(
+                    "sector"
+                )
+            )
+
+            df = df.merge(
+                sector_lookup,
+                on="sector",
+                how="left"
+            )
+
+    # --------------------------------------------------------
+    # Technical score
+    # --------------------------------------------------------
+
+    df["technical_score"] = df.apply(
+        calculate_technical_score,
         axis=1
     )
 
     # --------------------------------------------------------
-    # Rank
+    # Sector score
+    # --------------------------------------------------------
+
+    if "sector_score" not in df.columns:
+
+        df["sector_score"] = np.nan
+
+    # --------------------------------------------------------
+    # Fundamental score
+    # --------------------------------------------------------
+
+    df["fundamental_score"] = df.apply(
+        calculate_fundamental_score,
+        axis=1
+    )
+
+    # --------------------------------------------------------
+    # Overall rating
+    # --------------------------------------------------------
+
+    df["overall_rating"] = df.apply(
+        lambda row:
+            calculate_overall_rating(
+                row["technical_score"],
+                row["fundamental_score"],
+                row["sector_score"]
+            ),
+        axis=1
+    )
+
+    # Dashboard compatibility
+    df["rating"] = df[
+        "overall_rating"
+    ]
+
+    df["total_score"] = df[
+        "overall_rating"
+    ]
+
+    # --------------------------------------------------------
+    # Setup
+    # --------------------------------------------------------
+
+    df["setup"] = df.apply(
+        determine_setup,
+        axis=1
+    )
+
+    # --------------------------------------------------------
+    # Reasons
+    # --------------------------------------------------------
+
+    df["reasons_list"] = df.apply(
+        generate_reasons,
+        axis=1
+    )
+
+    df["reasons"] = df[
+        "reasons_list"
+    ].apply(
+        lambda x:
+            " • ".join(x)
+    )
+
+    # --------------------------------------------------------
+    # Risk / reward
+    # --------------------------------------------------------
+
+    df["risk_reward"] = df.apply(
+        calculate_risk_reward,
+        axis=1
+    )
+
+    # --------------------------------------------------------
+    # Fundamental status
+    # --------------------------------------------------------
+
+    df["fundamental_status"] = np.where(
+        df["fundamental_score"].isna(),
+        "Data unavailable",
+        "Available"
+    )
+
+    # --------------------------------------------------------
+    # Sort
     # --------------------------------------------------------
 
     df = df.sort_values(
-        by="technical_score",
+        [
+            "overall_rating",
+            "technical_score"
+        ],
         ascending=False
+    ).reset_index(
+        drop=True
     )
 
     df["technical_rank"] = (
-        range(
-            1,
-            len(df) + 1
-        )
+        df.index + 1
     )
 
-    return df.reset_index(
-        drop=True
+    df["rank"] = (
+        df.index + 1
     )
+
+    return df
 
 
 # ============================================================
 # SETUP SUMMARY
 # ============================================================
 
-def create_setup_summary(df):
-    """
-    Create counts by setup.
-    """
+def create_setup_summary(
+    ranked
+):
 
-    if df is None or df.empty:
+    if (
+        ranked is None
+        or ranked.empty
+    ):
+
         return pd.DataFrame()
 
+
     summary = (
-        df.groupby(
+        ranked
+        .groupby(
             "setup"
         )
-        .size()
-        .reset_index(
-            name="stock_count"
+        .agg(
+            stocks=(
+                "symbol",
+                "count"
+            ),
+            average_rating=(
+                "overall_rating",
+                "mean"
+            )
         )
-        .sort_values(
-            "stock_count",
-            ascending=False
-        )
+        .reset_index()
     )
 
-    return summary.reset_index(
+
+    summary[
+        "average_rating"
+    ] = summary[
+        "average_rating"
+    ].round(2)
+
+
+    return summary.sort_values(
+        "average_rating",
+        ascending=False
+    ).reset_index(
         drop=True
     )
 
 
 # ============================================================
-# TEST
+# WATCHLIST CREATION
 # ============================================================
 
-if __name__ == "__main__":
+def create_watchlists(
+    ranked
+):
 
-    print("=" * 60)
+    if (
+        ranked is None
+        or ranked.empty
+    ):
 
-    print(
-        "NSE SMART MARKET DASHBOARD"
+        return {}
+
+
+    watchlists = {}
+
+
+    # --------------------------------------------------------
+    # Next Day
+    # --------------------------------------------------------
+
+    watchlists[
+        "next_day"
+    ] = ranked[
+        ~ranked["setup"].isin(
+            ["Weak / Avoid"]
+        )
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # Swing
+    # --------------------------------------------------------
+
+    watchlists[
+        "swing"
+    ] = ranked[
+        ranked["trend"].isin(
+            [
+                "Strong Uptrend",
+                "Uptrend",
+                "Strong Bullish",
+                "Bullish"
+            ]
+        )
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # 52 Week High
+    # --------------------------------------------------------
+
+    watchlists[
+        "52w_high"
+    ] = ranked[
+        ranked[
+            "distance_from_52w_high_pct"
+        ] >= -5
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # 200 DMA Recovery
+    # --------------------------------------------------------
+
+    distance = pd.to_numeric(
+        ranked[
+            "distance_from_200dma_pct"
+        ],
+        errors="coerce"
     )
 
-    print(
-        "RANKING & SETUP ENGINE"
+    watchlists[
+        "dma_recovery"
+    ] = ranked[
+        distance.between(
+            -5,
+            5
+        )
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # Momentum
+    # --------------------------------------------------------
+
+    watchlists[
+        "momentum"
+    ] = ranked[
+        ranked["momentum"].isin(
+            [
+                "Positive",
+                "Strong Positive"
+            ]
+        )
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # Breakout
+    # --------------------------------------------------------
+
+    watchlists[
+        "breakout"
+    ] = ranked[
+        ranked["breakout_status"].isin(
+            [
+                "Confirmed Breakout",
+                "Breakout - Volume Confirmation Required",
+                "Near Breakout"
+            ]
+        )
+    ].copy()
+
+
+    # --------------------------------------------------------
+    # Intraday
+    #
+    # This is only an EOD candidate list for now.
+    # True intraday/VWAP analysis will be added when
+    # genuine intraday data is available.
+    # --------------------------------------------------------
+
+    volume = pd.to_numeric(
+        ranked[
+            "volume_ratio"
+        ],
+        errors="coerce"
     )
 
-    print("=" * 60)
+    watchlists[
+        "intraday"
+    ] = ranked[
+        volume >= 1.2
+    ].copy()
 
-    print()
 
-    print(
-        "Ranking Engine loaded successfully."
-    )
+    # --------------------------------------------------------
+    # Long Term
+    # --------------------------------------------------------
 
-    print()
+    watchlists[
+        "long_term"
+    ] = ranked[
+        distance > 0
+    ].copy()
 
-    print(
-        "Technical scoring:"
-    )
 
-    print(
-        "Trend       : 20 points"
-    )
+    # --------------------------------------------------------
+    # Options
+    #
+    # Underlying candidates only at this stage.
+    # Option-chain analysis will be connected later.
+    # --------------------------------------------------------
 
-    print(
-        "Momentum    : 15 points"
-    )
+    watchlists[
+        "options"
+    ] = ranked[
+        volume >= 1.2
+    ].copy()
 
-    print(
-        "RSI         : 15 points"
-    )
 
-    print(
-        "Volume      : 15 points"
-    )
-
-    print(
-        "Position    : 15 points"
-    )
-
-    print(
-        "Breakout    : 20 points"
-    )
-
-    print()
-
-    print(
-        "Total       : 100 points"
-    )
-
-    print()
-
-    print(
-        "Setup types:"
-    )
-
-    print(
-        "- Strong Breakout Watch"
-    )
-
-    print(
-        "- 52W High Watch"
-    )
-
-    print(
-        "- Momentum Watch"
-    )
-
-    print(
-        "- 200 DMA Recovery Watch"
-    )
-
-    print(
-        "- Breakout Confirmation Required"
-    )
-
-    print(
-        "- Pre-Breakout Watch"
-    )
-
-    print(
-        "- Weak / Avoid"
-    )
-
-    print(
-        "- Neutral Watch"
-    )
-
-    print()
-
-    print("=" * 60)
+    return watchlists
