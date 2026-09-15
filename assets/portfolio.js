@@ -2,308 +2,522 @@
 // NSE SMART MARKET DASHBOARD V2.1
 // PORTFOLIO BUILDER
 // Created by Rakesh Nagapuri
+//
+// STEP 3
+// - Working Portfolio Builder
+// - Uses dashboardData from dashboard.js
+// - Uses ranking-engine trade plans
+// - No arbitrary 10% stop loss
+// - No invented targets
+// - Diversification control
+// - Risk and reward calculations
+// - Stock detail integration
+// - Excel/CSV export
 // ============================================================
 
-let portfolioInitialized = false;
+
+let portfolioResult = null;
+
 
 // ============================================================
 // INITIALIZE
 // ============================================================
 
 function initializePortfolioBuilder() {
-    if (portfolioInitialized) return;
 
-    const container =
-        document.getElementById("portfolioBuilder");
-
-    if (!container) {
-        console.warn(
-            "Portfolio Builder container not found."
-        );
-        return;
-    }
-
-    portfolioInitialized = true;
-
-    renderPortfolioBuilder();
-}
-
-// ============================================================
-// MAIN UI
-// ============================================================
-
-function renderPortfolioBuilder() {
     const container =
         document.getElementById(
             "portfolioBuilder"
         );
 
-    if (!container) return;
+
+    if (!container) {
+
+        console.warn(
+            "Portfolio Builder container not found."
+        );
+
+        return;
+
+    }
+
+
+    renderPortfolioBuilder();
+
+}
+
+
+window.initializePortfolioBuilder =
+    initializePortfolioBuilder;
+
+
+// ============================================================
+// RENDER BUILDER
+// ============================================================
+
+function renderPortfolioBuilder() {
+
+    const container =
+        document.getElementById(
+            "portfolioBuilder"
+        );
+
+
+    if (!container) {
+        return;
+    }
+
 
     container.innerHTML = `
 
-        <div class="portfolio-builder">
+        <div class="portfolio-header">
 
-            <div class="portfolio-header">
+            <div>
 
-                <div>
-                    <h2>
-                        Portfolio Builder
-                    </h2>
+                <h2>
+                    Portfolio Builder
+                </h2>
 
-                    <p>
-                        Build a diversified portfolio
-                        using the dashboard's ranked
-                        stocks and engine-generated
-                        trade plans.
-                    </p>
-                </div>
-
-                <div class="portfolio-engine-badge">
-                    V2.1 ENGINE
-                </div>
+                <p>
+                    Build a diversified portfolio using
+                    the dashboard's ranked trade plans.
+                </p>
 
             </div>
 
-            <div class="portfolio-controls">
-
-                <div class="portfolio-control">
-
-                    <label for="portfolioAmount">
-                        Portfolio Amount
-                    </label>
-
-                    <input
-                        id="portfolioAmount"
-                        type="number"
-                        min="1000"
-                        step="1000"
-                        value="100000"
-                    >
-
-                </div>
-
-                <div class="portfolio-control">
-
-                    <label for="portfolioStockCount">
-                        Number of Stocks
-                    </label>
-
-                    <select id="portfolioStockCount">
-
-                        <option value="5">
-                            5
-                        </option>
-
-                        <option value="10" selected>
-                            10
-                        </option>
-
-                        <option value="15">
-                            15
-                        </option>
-
-                        <option value="20">
-                            20
-                        </option>
-
-                    </select>
-
-                </div>
-
-                <div class="portfolio-control">
-
-                    <label for="portfolioMinScore">
-                        Minimum Score
-                    </label>
-
-                    <input
-                        id="portfolioMinScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value="50"
-                    >
-
-                </div>
-
-                <div class="portfolio-control">
-
-                    <label for="portfolioMaxRisk">
-                        Max Risk / Stock %
-                    </label>
-
-                    <input
-                        id="portfolioMaxRisk"
-                        type="number"
-                        min="0.1"
-                        max="20"
-                        step="0.1"
-                        value="2"
-                    >
-
-                </div>
-
-                <div class="portfolio-actions">
-
-                    <button
-                        id="buildPortfolioBtn"
-                        class="portfolio-build-button"
-                        type="button"
-                    >
-                        Build Portfolio
-                    </button>
-
-                    <button
-                        id="exportPortfolioBtn"
-                        class="portfolio-export-button"
-                        type="button"
-                    >
-                        Export Excel
-                    </button>
-
-                </div>
-
+            <div class="portfolio-engine-badge">
+                ENGINE TRADE PLANS
             </div>
-
-            <div
-                id="portfolioSummary"
-                class="portfolio-summary"
-            ></div>
-
-            <div
-                id="portfolioTable"
-                class="portfolio-table-container"
-            ></div>
-
-            <div
-                id="portfolioNotes"
-                class="portfolio-notes"
-            ></div>
 
         </div>
+
+
+        <div class="portfolio-controls">
+
+
+            <div class="portfolio-control">
+
+                <label for="portfolioAmount">
+                    Portfolio Amount
+                </label>
+
+                <input
+                    id="portfolioAmount"
+                    type="number"
+                    min="10000"
+                    step="1000"
+                    value="100000"
+                >
+
+            </div>
+
+
+            <div class="portfolio-control">
+
+                <label for="portfolioStockCount">
+                    Number of Stocks
+                </label>
+
+                <input
+                    id="portfolioStockCount"
+                    type="number"
+                    min="1"
+                    max="25"
+                    step="1"
+                    value="10"
+                >
+
+            </div>
+
+
+            <div class="portfolio-control">
+
+                <label for="portfolioMinScore">
+                    Minimum Score
+                </label>
+
+                <input
+                    id="portfolioMinScore"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="50"
+                >
+
+            </div>
+
+
+            <div class="portfolio-control">
+
+                <label for="portfolioMaxRisk">
+                    Max Risk / Stock %
+                </label>
+
+                <input
+                    id="portfolioMaxRisk"
+                    type="number"
+                    min="0.25"
+                    max="10"
+                    step="0.25"
+                    value="2"
+                >
+
+            </div>
+
+
+            <div class="portfolio-actions">
+
+                <button
+                    id="calculatePortfolio"
+                    class="portfolio-build-button"
+                    type="button"
+                >
+                    Build Portfolio
+                </button>
+
+                <button
+                    id="exportPortfolioButton"
+                    class="portfolio-export-button"
+                    type="button"
+                    disabled
+                >
+                    Export Excel
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div
+            id="portfolioOutput"
+        >
+
+            <div class="empty-state">
+
+                Set your portfolio parameters and click
+                <strong>Build Portfolio</strong>.
+
+            </div>
+
+        </div>
+
     `;
+
 
     bindPortfolioEvents();
 
-    buildPortfolio();
 }
+
 
 // ============================================================
 // EVENTS
 // ============================================================
 
 function bindPortfolioEvents() {
+
     const buildButton =
         document.getElementById(
-            "buildPortfolioBtn"
+            "calculatePortfolio"
         );
+
 
     const exportButton =
         document.getElementById(
-            "exportPortfolioBtn"
+            "exportPortfolioButton"
         );
 
+
     if (buildButton) {
+
         buildButton.addEventListener(
             "click",
             buildPortfolio
         );
+
     }
 
+
     if (exportButton) {
+
         exportButton.addEventListener(
             "click",
             exportPortfolio
         );
+
     }
+
 }
+
 
 // ============================================================
 // BUILD PORTFOLIO
 // ============================================================
 
 function buildPortfolio() {
-    if (
-        typeof dashboardData ===
-        "undefined" ||
-        !dashboardData
-    ) {
-        showPortfolioMessage(
-            "Dashboard data is still loading."
+
+    const amountInput =
+        document.getElementById(
+            "portfolioAmount"
         );
 
+
+    const countInput =
+        document.getElementById(
+            "portfolioStockCount"
+        );
+
+
+    const scoreInput =
+        document.getElementById(
+            "portfolioMinScore"
+        );
+
+
+    const riskInput =
+        document.getElementById(
+            "portfolioMaxRisk"
+        );
+
+
+    const output =
+        document.getElementById(
+            "portfolioOutput"
+        );
+
+
+    if (!output) {
         return;
     }
+
 
     const amount =
-        getInputNumber(
-            "portfolioAmount",
-            100000
+        Number(
+            amountInput?.value
         );
 
-    const stockCount =
-        getInputNumber(
-            "portfolioStockCount",
-            10
+
+    const count =
+        Number(
+            countInput?.value
         );
+
 
     const minimumScore =
-        getInputNumber(
-            "portfolioMinScore",
-            50
+        Number(
+            scoreInput?.value
         );
 
-    const maxRiskPct =
-        getInputNumber(
-            "portfolioMaxRisk",
-            2
+
+    const maxRiskPercent =
+        Number(
+            riskInput?.value
         );
 
-    if (amount <= 0) {
-        showPortfolioMessage(
-            "Please enter a valid portfolio amount."
-        );
+
+    // --------------------------------------------------------
+    // VALIDATION
+    // --------------------------------------------------------
+
+    if (
+        !Number.isFinite(amount)
+        ||
+        amount <= 0
+    ) {
+
+        output.innerHTML = `
+
+            <div class="error-state">
+                Please enter a valid portfolio amount.
+            </div>
+
+        `;
 
         return;
+
     }
+
+
+    if (
+        !Number.isFinite(count)
+        ||
+        count < 1
+    ) {
+
+        output.innerHTML = `
+
+            <div class="error-state">
+                Number of stocks must be at least 1.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    if (
+        !Number.isFinite(minimumScore)
+        ||
+        minimumScore < 0
+        ||
+        minimumScore > 100
+    ) {
+
+        output.innerHTML = `
+
+            <div class="error-state">
+                Minimum score must be between 0 and 100.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    if (
+        !Number.isFinite(maxRiskPercent)
+        ||
+        maxRiskPercent <= 0
+    ) {
+
+        output.innerHTML = `
+
+            <div class="error-state">
+                Maximum risk per stock must be greater than zero.
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    // --------------------------------------------------------
+    // SHOW PROCESSING
+    // --------------------------------------------------------
+
+    output.innerHTML = `
+
+        <div class="loading-state">
+
+            Analysing ranked stocks and trade plans...
+
+        </div>
+
+    `;
+
+
+    // --------------------------------------------------------
+    // GET CANDIDATES
+    // --------------------------------------------------------
 
     const candidates =
         getPortfolioCandidates(
             minimumScore
         );
 
-    if (candidates.length === 0) {
-        renderPortfolioEmptyState();
+
+    if (
+        candidates.length === 0
+    ) {
+
+        portfolioResult =
+            null;
+
+
+        output.innerHTML = `
+
+            <div class="error-state">
+
+                No suitable stocks were found with
+                the current score and trade-plan filters.
+
+                <br><br>
+
+                Try reducing the minimum score or
+                selecting fewer stocks.
+
+            </div>
+
+        `;
+
+
+        disableExport();
+
         return;
+
     }
+
+
+    // --------------------------------------------------------
+    // SELECT DIVERSIFIED STOCKS
+    // --------------------------------------------------------
 
     const selected =
         selectPortfolioStocks(
             candidates,
-            stockCount
+            count
         );
+
+
+    if (
+        selected.length === 0
+    ) {
+
+        output.innerHTML = `
+
+            <div class="error-state">
+
+                Portfolio could not be constructed
+                from the available qualified setups.
+
+            </div>
+
+        `;
+
+
+        disableExport();
+
+        return;
+
+    }
+
+
+    // --------------------------------------------------------
+    // ALLOCATE
+    // --------------------------------------------------------
 
     const portfolio =
-        calculatePortfolio(
+        calculatePortfolioAllocation(
             selected,
             amount,
-            maxRiskPct
+            maxRiskPercent
         );
 
-    renderPortfolioSummary(
+
+    portfolioResult =
+        portfolio;
+
+
+    // --------------------------------------------------------
+    // RENDER
+    // --------------------------------------------------------
+
+    renderPortfolioResult(
         portfolio
     );
 
-    renderPortfolioTable(
-        portfolio
-    );
 
-    renderPortfolioNotes(
-        portfolio
-    );
+    enableExport();
+
 }
+
 
 // ============================================================
 // CANDIDATES
@@ -312,1034 +526,1229 @@ function buildPortfolio() {
 function getPortfolioCandidates(
     minimumScore
 ) {
+
+    if (
+        typeof dashboardData ===
+        "undefined"
+        ||
+        !dashboardData
+    ) {
+
+        console.error(
+            "dashboardData unavailable."
+        );
+
+        return [];
+
+    }
+
+
     const stocks =
         Array.isArray(
             dashboardData.stocks
         )
-            ? dashboardData.stocks
-            : [];
+            ?
+            dashboardData.stocks
+            :
+            [];
 
-    return stocks
-        .map(normalizePortfolioStock)
-        .filter(stock => {
 
-            if (
-                !stock.symbol
-            ) {
-                return false;
+    const candidates = [];
+
+
+    stocks.forEach(
+        stock => {
+
+            if (!stock) {
+                return;
             }
 
-            if (
-                !isFiniteNumber(
-                    stock.price
-                ) ||
-                stock.price <= 0
-            ) {
-                return false;
-            }
+
+            const score =
+                Number(
+                    firstValue(
+                        stock.overall_score,
+                        stock.score
+                    )
+                );
+
+
+            const price =
+                Number(
+                    firstValue(
+                        stock.price,
+                        stock.close
+                    )
+                );
+
+
+            const entry =
+                getTradeValue(
+                    stock,
+                    [
+                        "entry_price",
+                        "entry",
+                        "Entry_Price"
+                    ]
+                );
+
+
+            const stop =
+                getTradeValue(
+                    stock,
+                    [
+                        "stop_loss",
+                        "stop",
+                        "Stop_Loss"
+                    ]
+                );
+
+
+            const target1 =
+                getTradeValue(
+                    stock,
+                    [
+                        "target_1",
+                        "target1",
+                        "Target_1"
+                    ]
+                );
+
+
+            const target2 =
+                getTradeValue(
+                    stock,
+                    [
+                        "target_2",
+                        "target2",
+                        "Target_2"
+                    ]
+                );
+
+
+            const rr =
+                Number(
+                    firstValue(
+                        stock.risk_reward_1,
+                        stock.risk_reward
+                    )
+                );
+
+
+            // ------------------------------------------------
+            // Basic validity
+            // ------------------------------------------------
 
             if (
-                !isFiniteNumber(
-                    stock.overall_score
+                !Number.isFinite(
+                    score
                 )
             ) {
-                return false;
+                return;
             }
+
 
             if (
-                stock.overall_score <
-                minimumScore
+                score < minimumScore
             ) {
-                return false;
+                return;
             }
 
-            /*
-             * Portfolio Builder should prefer
-             * stocks that are technically healthy.
-             */
+
             if (
-                stock.sma200 &&
-                stock.price <
-                stock.sma200
+                !Number.isFinite(
+                    price
+                )
+                ||
+                price <= 0
             ) {
-                return false;
+                return;
             }
 
-            /*
-             * Avoid Weak / Avoid setups.
-             */
+
+            // ------------------------------------------------
+            // Must have engine trade plan
+            // ------------------------------------------------
+
+            if (
+                !Number.isFinite(
+                    entry
+                )
+                ||
+                !Number.isFinite(
+                    stop
+                )
+                ||
+                !Number.isFinite(
+                    target1
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            // ------------------------------------------------
+            // Never accept invalid plan geometry
+            // ------------------------------------------------
+
+            if (
+                stop >= entry
+            ) {
+                return;
+            }
+
+
+            if (
+                target1 <= entry
+            ) {
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // R:R filter
+            // ------------------------------------------------
+
+            if (
+                Number.isFinite(
+                    rr
+                )
+                &&
+                rr < 1.5
+            ) {
+
+                return;
+
+            }
+
+
+            // ------------------------------------------------
+            // Reject weak / avoid
+            // ------------------------------------------------
+
             const setup =
                 String(
-                    stock.setup || ""
+                    firstValue(
+                        stock.setup,
+                        stock.trade_plan_type,
+                        ""
+                    )
                 ).toLowerCase();
 
-            if (
-                setup.includes("weak") ||
-                setup.includes("avoid")
-            ) {
-                return false;
-            }
 
-            /*
-             * Portfolio Builder should use
-             * engine-generated trade plans.
-             *
-             * We do NOT create our own
-             * 10% stop-loss here.
-             */
+            const status =
+                String(
+                    firstValue(
+                        stock.trade_plan_status,
+                        ""
+                    )
+                ).toLowerCase();
+
+
             if (
-                !isFiniteNumber(
-                    stock.stop_loss
+                setup.includes(
+                    "weak"
+                )
+                ||
+                setup.includes(
+                    "avoid"
+                )
+                ||
+                status.includes(
+                    "avoid"
                 )
             ) {
-                return false;
+
+                return;
+
             }
 
+
+            // ------------------------------------------------
+            // Prefer stocks above 200 DMA when available
+            // ------------------------------------------------
+
+            const above200 =
+                stock.above_200dma;
+
+
+            const sma200 =
+                Number(
+                    stock.sma200
+                );
+
+
+            const above200Score =
+                above200 === true
+                ||
+                (
+                    Number.isFinite(
+                        sma200
+                    )
+                    &&
+                    price > sma200
+                )
+                    ? 1
+                    : 0;
+
+
+            // ------------------------------------------------
+            // Trade quality
+            // ------------------------------------------------
+
+            const tradeQuality =
+                String(
+                    stock.trade_plan_quality ||
+                    ""
+                ).toLowerCase();
+
+
+            let qualityScore = 0;
+
+
             if (
-                !isFiniteNumber(
-                    stock.entry_price
+                tradeQuality.includes(
+                    "strong"
                 )
             ) {
-                return false;
-            }
 
-            if (
-                !isFiniteNumber(
-                    stock.target_1
+                qualityScore = 3;
+
+            }
+            else if (
+                tradeQuality.includes(
+                    "acceptable"
                 )
             ) {
-                return false;
-            }
 
-            /*
-             * Require a usable risk/reward
-             * where available.
-             */
-            if (
-                isFiniteNumber(
-                    stock.risk_reward_1
-                ) &&
-                stock.risk_reward_1 < 1.5
+                qualityScore = 2;
+
+            }
+            else if (
+                tradeQuality.includes(
+                    "poor"
+                )
             ) {
-                return false;
+
+                qualityScore = 0;
+
+            }
+            else {
+
+                qualityScore = 1;
+
             }
 
-            return true;
-        })
-        .sort(
-            portfolioRankingComparator
-        );
-}
 
-function normalizePortfolioStock(
-    stock
-) {
-    const entryPrice =
-        firstNumber(
-            stock.entry_price,
-            stock.entry,
-            stock.Entry_Price
-        );
+            // ------------------------------------------------
+            // Composite portfolio ranking
+            // ------------------------------------------------
 
-    const entryLow =
-        firstNumber(
-            stock.entry_low,
-            stock.Entry_Low
-        );
+            const technical =
+                Number(
+                    stock.technical_score
+                ) || 0;
 
-    const entryHigh =
-        firstNumber(
-            stock.entry_high,
-            stock.Entry_High
-        );
 
-    const stopLoss =
-        firstNumber(
-            stock.stop_loss,
-            stock.stop,
-            stock.Stop_Loss
-        );
+            const fundamental =
+                Number(
+                    stock.fundamental_score
+                ) || 0;
 
-    const target1 =
-        firstNumber(
-            stock.target_1,
-            stock.target1,
-            stock.Target_1
-        );
 
-    const target2 =
-        firstNumber(
-            stock.target_2,
-            stock.target2,
-            stock.Target_2
-        );
+            const sector =
+                Number(
+                    stock.sector_score
+                ) || 0;
 
-    const rr1 =
-        firstNumber(
-            stock.risk_reward_1,
-            stock.risk_reward
-        );
 
-    const rr2 =
-        firstNumber(
-            stock.risk_reward_2
-        );
+            const rankingScore =
 
-    return {
-        ...stock,
+                score * 0.50
 
-        symbol:
-            stock.symbol ||
-            stock.nse_symbol ||
-            "",
+                +
 
-        company_name:
-            stock.company_name ||
-            "",
+                technical * 0.15
 
-        price:
-            firstNumber(
-                stock.price,
-                stock.close
-            ),
+                +
 
-        overall_score:
-            firstNumber(
-                stock.overall_score,
-                stock.rating
-            ) || 0,
+                fundamental * 0.15
 
-        technical_score:
-            firstNumber(
-                stock.technical_score
-            ) || 0,
+                +
 
-        fundamental_score:
-            firstNumber(
-                stock.fundamental_score
-            ) || 0,
+                sector * 0.05
 
-        sector_score:
-            firstNumber(
-                stock.sector_score
-            ) || 0,
+                +
 
-        entry_price:
-            entryPrice,
+                qualityScore * 5
 
-        entry_low:
-            entryLow,
+                +
 
-        entry_high:
-            entryHigh,
+                above200Score * 5;
 
-        stop_loss:
-            stopLoss,
 
-        target_1:
-            target1,
+            candidates.push({
 
-        target_2:
-            target2,
+                ...stock,
 
-        risk_reward_1:
-            rr1,
+                _price:
+                    price,
 
-        risk_reward_2:
-            rr2,
+                _entry:
+                    entry,
 
-        trade_plan_type:
-            stock.trade_plan_type ||
-            "",
+                _stop:
+                    stop,
 
-        trade_plan_status:
-            stock.trade_plan_status ||
-            "",
+                _target1:
+                    target1,
 
-        trade_plan_quality:
-            stock.trade_plan_quality ||
-            "",
+                _target2:
+                    Number.isFinite(
+                        target2
+                    )
+                        ? target2
+                        : null,
 
-        trade_plan_reason:
-            stock.trade_plan_reason ||
-            "",
+                _rr:
+                    Number.isFinite(
+                        rr
+                    )
+                        ? rr
+                        : calculateRiskReward(
+                            entry,
+                            stop,
+                            target1
+                        ),
 
-        invalidation:
-            stock.invalidation ||
-            "",
+                _rankingScore:
+                    rankingScore
 
-        setup:
-            stock.setup ||
-            "Neutral Watch",
+            });
 
-        trend:
-            stock.trend ||
-            "",
-
-        momentum:
-            stock.momentum ||
-            "",
-
-        sector:
-            stock.sector ||
-            stock.primary_sector ||
-            ""
-    };
-}
-
-// ============================================================
-// RANKING
-// ============================================================
-
-function portfolioRankingComparator(
-    a,
-    b
-) {
-    /*
-     * Ranking priority:
-     *
-     * 1. Overall score
-     * 2. Trade-plan quality
-     * 3. R:R
-     * 4. Technical score
-     * 5. Fundamental score
-     * 6. Sector score
-     */
-
-    const scoreDiff =
-        Number(
-            b.overall_score || 0
-        ) -
-        Number(
-            a.overall_score || 0
-        );
-
-    if (
-        Math.abs(scoreDiff) > 0.001
-    ) {
-        return scoreDiff;
-    }
-
-    const qualityDiff =
-        tradeQualityRank(
-            b.trade_plan_quality
-        ) -
-        tradeQualityRank(
-            a.trade_plan_quality
-        );
-
-    if (
-        qualityDiff !== 0
-    ) {
-        return qualityDiff;
-    }
-
-    const rrDiff =
-        Number(
-            b.risk_reward_1 || 0
-        ) -
-        Number(
-            a.risk_reward_1 || 0
-        );
-
-    if (
-        Math.abs(rrDiff) > 0.001
-    ) {
-        return rrDiff;
-    }
-
-    const technicalDiff =
-        Number(
-            b.technical_score || 0
-        ) -
-        Number(
-            a.technical_score || 0
-        );
-
-    if (
-        Math.abs(technicalDiff) > 0.001
-    ) {
-        return technicalDiff;
-    }
-
-    const fundamentalDiff =
-        Number(
-            b.fundamental_score || 0
-        ) -
-        Number(
-            a.fundamental_score || 0
-        );
-
-    if (
-        Math.abs(fundamentalDiff) > 0.001
-    ) {
-        return fundamentalDiff;
-    }
-
-    return (
-        Number(
-            b.sector_score || 0
-        ) -
-        Number(
-            a.sector_score || 0
-        )
+        }
     );
+
+
+    candidates.sort(
+        (
+            a,
+            b
+        ) =>
+            b._rankingScore
+            -
+            a._rankingScore
+    );
+
+
+    return candidates;
+
 }
 
-function tradeQualityRank(
-    quality
-) {
-    const text =
-        String(
-            quality || ""
-        ).toLowerCase();
-
-    if (
-        text.includes("strong")
-    ) {
-        return 3;
-    }
-
-    if (
-        text.includes("acceptable")
-    ) {
-        return 2;
-    }
-
-    if (
-        text.includes("poor")
-    ) {
-        return 1;
-    }
-
-    return 0;
-}
 
 // ============================================================
-// STOCK SELECTION
+// DIVERSIFICATION
 // ============================================================
 
 function selectPortfolioStocks(
     candidates,
-    count
+    desiredCount
 ) {
+
     const selected = [];
 
-    const sectorCount = {};
+    const sectorCounts = {};
+
+
+    // --------------------------------------------------------
+    // First pass:
+    // maximum 2 stocks per sector
+    // --------------------------------------------------------
 
     for (
         const stock of candidates
     ) {
+
         if (
-            selected.length >= count
+            selected.length >=
+            desiredCount
         ) {
+
             break;
+
         }
+
 
         const sector =
-            stock.sector ||
-            "Unknown";
+            normalizeSector(
+                stock
+            );
 
-        /*
-         * Basic diversification:
-         * do not initially take more than
-         * 2 stocks from one sector.
-         */
-        const existing =
-            sectorCount[sector] || 0;
+
+        const count =
+            sectorCounts[
+                sector
+            ] || 0;
+
 
         if (
-            existing >= 2 &&
-            candidates.length >= count * 2
+            count >= 2
         ) {
+
             continue;
+
         }
 
-        selected.push(stock);
 
-        sectorCount[sector] =
-            existing + 1;
+        selected.push(
+            stock
+        );
+
+
+        sectorCounts[
+            sector
+        ] =
+            count + 1;
+
     }
 
-    /*
-     * If diversification prevented
-     * reaching the requested count,
-     * fill remaining slots by ranking.
-     */
+
+    // --------------------------------------------------------
+    // Second pass:
+    // fill remaining slots if needed
+    // --------------------------------------------------------
+
     if (
-        selected.length < count
+        selected.length <
+        desiredCount
     ) {
+
         for (
             const stock of candidates
         ) {
+
             if (
-                selected.length >= count
+                selected.length >=
+                desiredCount
             ) {
+
                 break;
+
             }
+
+
+            const symbol =
+                getSymbol(
+                    stock
+                );
+
 
             const exists =
                 selected.some(
                     item =>
-                        item.symbol ===
-                        stock.symbol
+                        getSymbol(
+                            item
+                        ) ===
+                        symbol
                 );
 
-            if (!exists) {
-                selected.push(stock);
+
+            if (
+                exists
+            ) {
+
+                continue;
+
             }
+
+
+            selected.push(
+                stock
+            );
+
         }
+
     }
+
 
     return selected;
+
 }
 
+
 // ============================================================
-// PORTFOLIO CALCULATION
+// PORTFOLIO ALLOCATION
 // ============================================================
 
-function calculatePortfolio(
+function calculatePortfolioAllocation(
     stocks,
     amount,
-    maxRiskPct
+    maxRiskPercent
 ) {
-    if (
-        !stocks ||
-        stocks.length === 0
-    ) {
-        return {
-            stocks: [],
-            amount,
-            invested: 0,
-            cash: amount,
-            expectedProfitT1: 0,
-            expectedProfitT2: 0,
-            maximumLoss: 0,
-            riskPercent: 0
-        };
-    }
 
-    /*
-     * Equal capital allocation.
-     *
-     * Trade plan itself determines:
-     * Entry / SL / T1 / T2.
-     *
-     * The portfolio builder does NOT
-     * overwrite those values.
-     */
-    const allocation =
-        amount / stocks.length;
+    const count =
+        stocks.length;
 
-    const rows = [];
 
-    let invested = 0;
-    let expectedProfitT1 = 0;
-    let expectedProfitT2 = 0;
-    let maximumLoss = 0;
+    const equalCapital =
+        amount /
+        count;
 
-    for (
-        const stock of stocks
-    ) {
-        const entry =
-            stock.entry_price;
 
-        const stop =
-            stock.stop_loss;
+    const rows =
+        stocks.map(
+            stock => {
 
-        const target1 =
-            stock.target_1;
+                const entry =
+                    stock._entry;
 
-        const target2 =
-            stock.target_2;
 
-        if (
-            !isFiniteNumber(entry) ||
-            !isFiniteNumber(stop) ||
-            !isFiniteNumber(target1)
-        ) {
-            continue;
-        }
+                const stop =
+                    stock._stop;
 
-        let quantity =
-            Math.floor(
-                allocation / entry
-            );
 
-        if (
-            quantity < 1
-        ) {
-            quantity = 0;
-        }
+                const target1 =
+                    stock._target1;
 
-        const investment =
-            quantity * entry;
 
-        const riskPerShare =
-            Math.max(
-                0,
-                entry - stop
-            );
+                const target2 =
+                    stock._target2;
 
-        const rewardT1PerShare =
-            Math.max(
-                0,
-                target1 - entry
-            );
 
-        const rewardT2PerShare =
-            isFiniteNumber(target2)
-                ? Math.max(
-                    0,
-                    target2 - entry
-                )
-                : 0;
+                const riskPerShare =
+                    Math.max(
+                        0,
+                        entry -
+                        stop
+                    );
 
-        const stockRisk =
-            riskPerShare *
-            quantity;
 
-        const profitT1 =
-            rewardT1PerShare *
-            quantity;
+                let quantity =
+                    Math.floor(
+                        equalCapital /
+                        entry
+                    );
 
-        const profitT2 =
-            rewardT2PerShare *
-            quantity;
 
-        const portfolioWeight =
-            amount > 0
-                ? investment /
-                  amount *
-                  100
-                : 0;
+                /*
+                 * Risk cap:
+                 *
+                 * Maximum permitted rupee risk
+                 * for this stock.
+                 */
 
-        const riskPercent =
-            amount > 0
-                ? stockRisk /
-                  amount *
-                  100
-                : 0;
+                const maximumRisk =
+                    amount *
+                    (
+                        maxRiskPercent /
+                        100
+                    );
 
-        rows.push({
-            ...stock,
 
-            allocation:
-                allocation,
+                if (
+                    riskPerShare > 0
+                ) {
 
-            quantity:
-                quantity,
+                    const riskBasedQuantity =
+                        Math.floor(
+                            maximumRisk /
+                            riskPerShare
+                        );
 
-            investment:
-                investment,
 
-            portfolio_weight:
-                portfolioWeight,
+                    if (
+                        riskBasedQuantity >
+                        0
+                    ) {
 
-            risk_per_share:
-                riskPerShare,
+                        quantity =
+                            Math.min(
+                                quantity,
+                                riskBasedQuantity
+                            );
 
-            reward_t1_per_share:
-                rewardT1PerShare,
+                    }
 
-            reward_t2_per_share:
-                rewardT2PerShare,
+                }
 
-            stock_risk:
-                stockRisk,
 
-            risk_percent:
-                riskPercent,
+                /*
+                 * Make sure we never
+                 * allocate more than the
+                 * available capital.
+                 */
 
-            expected_profit_t1:
-                profitT1,
+                const investment =
+                    quantity *
+                    entry;
 
-            expected_profit_t2:
-                profitT2
-        });
 
-        invested += investment;
-        expectedProfitT1 +=
-            profitT1;
+                const risk =
+                    quantity *
+                    riskPerShare;
 
-        expectedProfitT2 +=
-            profitT2;
 
-        maximumLoss +=
-            stockRisk;
-    }
+                const reward1 =
+                    quantity *
+                    Math.max(
+                        0,
+                        target1 -
+                        entry
+                    );
 
-    const cash =
+
+                const reward2 =
+                    quantity *
+                    Math.max(
+                        0,
+                        (
+                            Number.isFinite(
+                                target2
+                            )
+                                ? target2
+                                : target1
+                        )
+                        -
+                        entry
+                    );
+
+
+                return {
+
+                    ...stock,
+
+                    quantity:
+                        quantity,
+
+                    investment:
+                        investment,
+
+                    allocation_pct:
+                        (
+                            investment /
+                            amount *
+                            100
+                        ),
+
+                    risk_amount:
+                        risk,
+
+                    reward1_amount:
+                        reward1,
+
+                    reward2_amount:
+                        reward2,
+
+                    risk_reward_1:
+                        calculateRiskReward(
+                            entry,
+                            stop,
+                            target1
+                        ),
+
+                    risk_reward_2:
+                        Number.isFinite(
+                            target2
+                        )
+                            ?
+                            calculateRiskReward(
+                                entry,
+                                stop,
+                                target2
+                            )
+                            :
+                            null
+
+                };
+
+            }
+        );
+
+
+    const totalInvestment =
+        rows.reduce(
+            (
+                total,
+                row
+            ) =>
+                total +
+                row.investment,
+            0
+        );
+
+
+    const totalRisk =
+        rows.reduce(
+            (
+                total,
+                row
+            ) =>
+                total +
+                row.risk_amount,
+            0
+        );
+
+
+    const totalReward1 =
+        rows.reduce(
+            (
+                total,
+                row
+            ) =>
+                total +
+                row.reward1_amount,
+            0
+        );
+
+
+    const totalReward2 =
+        rows.reduce(
+            (
+                total,
+                row
+            ) =>
+                total +
+                row.reward2_amount,
+            0
+        );
+
+
+    const unusedCapital =
         Math.max(
             0,
-            amount - invested
+            amount -
+            totalInvestment
         );
 
-    const riskPercent =
+
+    const portfolioRiskPct =
         amount > 0
-            ? maximumLoss /
-              amount *
-              100
-            : 0;
+            ?
+            (
+                totalRisk /
+                amount *
+                100
+            )
+            :
+            0;
 
-    /*
-     * maxRiskPct is a portfolio-awareness
-     * indicator, not a reason to distort
-     * the engine's stop-loss.
-     */
+
+    const portfolioReward1Pct =
+        amount > 0
+            ?
+            (
+                totalReward1 /
+                amount *
+                100
+            )
+            :
+            0;
+
+
+    const portfolioReward2Pct =
+        amount > 0
+            ?
+            (
+                totalReward2 /
+                amount *
+                100
+            )
+            :
+            0;
+
+
     return {
-        stocks: rows,
 
-        amount,
+        amount:
+            amount,
 
-        allocation,
+        requested_count:
+            count,
 
-        invested,
+        stocks:
+            rows,
 
-        cash,
+        total_investment:
+            totalInvestment,
 
-        expectedProfitT1,
+        unused_capital:
+            unusedCapital,
 
-        expectedProfitT2,
+        total_risk:
+            totalRisk,
 
-        maximumLoss,
+        total_reward1:
+            totalReward1,
 
-        riskPercent,
+        total_reward2:
+            totalReward2,
 
-        maxRiskPct,
+        portfolio_risk_pct:
+            portfolioRiskPct,
 
-        expectedReturnT1:
-            invested > 0
-                ? expectedProfitT1 /
-                  invested *
-                  100
-                : 0,
+        portfolio_reward1_pct:
+            portfolioReward1Pct,
 
-        expectedReturnT2:
-            invested > 0
-                ? expectedProfitT2 /
-                  invested *
-                  100
-                : 0,
+        portfolio_reward2_pct:
+            portfolioReward2Pct
 
-        investmentUtilization:
-            amount > 0
-                ? invested /
-                  amount *
-                  100
-                : 0
     };
+
 }
 
+
 // ============================================================
-// SUMMARY
+// RENDER RESULT
 // ============================================================
 
-function renderPortfolioSummary(
+function renderPortfolioResult(
     portfolio
 ) {
-    const container =
+
+    const output =
         document.getElementById(
-            "portfolioSummary"
+            "portfolioOutput"
         );
 
-    if (!container) return;
 
-    const riskStatus =
-        getRiskStatus(
-            portfolio.riskPercent,
-            portfolio.maxRiskPct
-        );
-
-    container.innerHTML = `
-
-        <div class="portfolio-summary-grid">
-
-            ${portfolioMetric(
-                "Portfolio Value",
-                formatMoney(
-                    portfolio.amount
-                ),
-                "Capital"
-            )}
-
-            ${portfolioMetric(
-                "Invested",
-                formatMoney(
-                    portfolio.invested
-                ),
-                formatPercent(
-                    portfolio.investmentUtilization
-                ) + " deployed"
-            )}
-
-            ${portfolioMetric(
-                "Cash",
-                formatMoney(
-                    portfolio.cash
-                ),
-                "Unallocated"
-            )}
-
-            ${portfolioMetric(
-                "Expected Profit T1",
-                formatMoney(
-                    portfolio.expectedProfitT1
-                ),
-                formatPercent(
-                    portfolio.expectedReturnT1
-                )
-            )}
-
-            ${portfolioMetric(
-                "Expected Profit T2",
-                formatMoney(
-                    portfolio.expectedProfitT2
-                ),
-                formatPercent(
-                    portfolio.expectedReturnT2
-                )
-            )}
-
-            ${portfolioMetric(
-                "Maximum Planned Loss",
-                formatMoney(
-                    portfolio.maximumLoss
-                ),
-                formatPercent(
-                    portfolio.riskPercent
-                )
-            )}
-
-            ${portfolioMetric(
-                "Stocks",
-                String(
-                    portfolio.stocks.length
-                ),
-                "Selected"
-            )}
-
-            ${portfolioMetric(
-                "Risk Status",
-                riskStatus.label,
-                riskStatus.description
-            )}
-
-        </div>
-    `;
-}
-
-function portfolioMetric(
-    title,
-    value,
-    subtitle
-) {
-    return `
-        <div class="portfolio-metric">
-
-            <span>
-                ${escapeHtml(title)}
-            </span>
-
-            <strong>
-                ${escapeHtml(value)}
-            </strong>
-
-            <small>
-                ${escapeHtml(
-                    subtitle || ""
-                )}
-            </small>
-
-        </div>
-    `;
-}
-
-// ============================================================
-// PORTFOLIO TABLE
-// ============================================================
-
-function renderPortfolioTable(
-    portfolio
-) {
-    const container =
-        document.getElementById(
-            "portfolioTable"
-        );
-
-    if (!container) return;
-
-    if (
-        portfolio.stocks.length === 0
-    ) {
-        renderPortfolioEmptyState();
+    if (!output) {
         return;
     }
 
-    const rows =
-        portfolio.stocks
-            .map(
-                (stock, index) =>
-                    renderPortfolioRow(
-                        stock,
-                        index + 1
+
+    output.innerHTML = `
+
+        <div class="portfolio-summary">
+
+            <div class="portfolio-summary-grid">
+
+                ${portfolioMetric(
+                    "Stocks",
+                    portfolio.stocks.length
+                )}
+
+                ${portfolioMetric(
+                    "Capital",
+                    formatMoney(
+                        portfolio.amount
                     )
-            )
-            .join("");
+                )}
 
-    container.innerHTML = `
+                ${portfolioMetric(
+                    "Invested",
+                    formatMoney(
+                        portfolio.total_investment
+                    )
+                )}
 
-        <div class="portfolio-table-wrapper">
+                ${portfolioMetric(
+                    "Unused",
+                    formatMoney(
+                        portfolio.unused_capital
+                    )
+                )}
 
-            <table class="dashboard-table portfolio-table">
+                ${portfolioMetric(
+                    "Max Portfolio Risk",
+                    formatMoney(
+                        portfolio.total_risk
+                    ),
+                    formatPercent(
+                        portfolio.portfolio_risk_pct
+                    )
+                )}
 
-                <thead>
+                ${portfolioMetric(
+                    "Reward @ T1",
+                    formatMoney(
+                        portfolio.total_reward1
+                    ),
+                    formatPercent(
+                        portfolio.portfolio_reward1_pct
+                    )
+                )}
 
-                    <tr>
+                ${portfolioMetric(
+                    "Reward @ T2",
+                    formatMoney(
+                        portfolio.total_reward2
+                    ),
+                    formatPercent(
+                        portfolio.portfolio_reward2_pct
+                    )
+                )}
 
-                        <th>#</th>
-                        <th>Stock</th>
-                        <th>Setup</th>
-                        <th>Entry</th>
-                        <th>Stop Loss</th>
-                        <th>Target 1</th>
-                        <th>Target 2</th>
-                        <th>R:R</th>
-                        <th>Qty</th>
-                        <th>Investment</th>
-                        <th>Risk</th>
-                        <th>T1 Profit</th>
-                        <th>T2 Profit</th>
-                        <th>Score</th>
+                ${portfolioMetric(
+                    "Avg Score",
+                    formatNumber(
+                        averageScore(
+                            portfolio.stocks
+                        )
+                    )
+                )}
 
-                    </tr>
+            </div>
 
-                </thead>
+        </div>
 
-                <tbody>
-                    ${rows}
-                </tbody>
 
-            </table>
+        <div class="portfolio-table-container">
+
+            <div class="portfolio-table-wrapper">
+
+                <table class="dashboard-table portfolio-table">
+
+                    <thead>
+
+                        <tr>
+
+                            <th>
+                                #
+                            </th>
+
+                            <th>
+                                Stock
+                            </th>
+
+                            <th>
+                                Score
+                            </th>
+
+                            <th>
+                                Setup
+                            </th>
+
+                            <th>
+                                Entry
+                            </th>
+
+                            <th>
+                                Stop Loss
+                            </th>
+
+                            <th>
+                                Target 1
+                            </th>
+
+                            <th>
+                                Target 2
+                            </th>
+
+                            <th>
+                                R:R
+                            </th>
+
+                            <th>
+                                Qty
+                            </th>
+
+                            <th>
+                                Investment
+                            </th>
+
+                            <th>
+                                Allocation
+                            </th>
+
+                            <th>
+                                Risk
+                            </th>
+
+                            <th>
+                                Sector
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        ${
+                            portfolio.stocks
+                                .map(
+                                    (
+                                        stock,
+                                        index
+                                    ) =>
+                                        renderPortfolioRow(
+                                            stock,
+                                            index + 1
+                                        )
+                                )
+                                .join("")
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <div class="portfolio-notes">
+
+            <div class="portfolio-disclaimer">
+
+                <strong>
+                    Portfolio construction logic
+                </strong>
+
+                <ul>
+
+                    <li>
+                        Entry, Stop Loss and Targets are taken
+                        from the ranking engine's setup-specific
+                        trade plan.
+                    </li>
+
+                    <li>
+                        No blanket 10% stop-loss is used.
+                    </li>
+
+                    <li>
+                        Stocks with unavailable or invalid
+                        trade plans are excluded.
+                    </li>
+
+                    <li>
+                        Portfolio selection initially limits
+                        exposure to a maximum of two stocks
+                        from the same sector.
+                    </li>
+
+                    <li>
+                        Actual execution should consider
+                        liquidity, slippage and current market
+                        conditions.
+                    </li>
+
+                </ul>
+
+                <p class="risk-warning">
+
+                    This portfolio is a model allocation for
+                    research and educational purposes only.
+                    It is not investment advice.
+
+                </p>
+
+            </div>
 
         </div>
 
     `;
+
+
+    bindPortfolioStockRows();
+
 }
+
+
+// ============================================================
+// PORTFOLIO METRIC
+// ============================================================
+
+function portfolioMetric(
+    label,
+    value,
+    small = ""
+) {
+
+    return `
+
+        <div class="portfolio-metric">
+
+            <span>
+                ${escapeHtml(
+                    label
+                )}
+            </span>
+
+            <strong>
+                ${escapeHtml(
+                    String(value)
+                )}
+            </strong>
+
+            ${
+                small
+
+                    ?
+
+                    `
+                        <small>
+                            ${escapeHtml(
+                                String(
+                                    small
+                                )
+                            )}
+                        </small>
+                    `
+
+                    :
+
+                    ""
+            }
+
+        </div>
+
+    `;
+
+}
+
+
+// ============================================================
+// PORTFOLIO ROW
+// ============================================================
 
 function renderPortfolioRow(
     stock,
     rank
 ) {
-    const rr =
-        stock.risk_reward_1;
+
+    const symbol =
+        getSymbol(
+            stock
+        );
+
 
     return `
+
         <tr
             class="portfolio-stock-row"
-            onclick="openPortfolioStock(
-                '${escapePortfolioJs(
-                    stock.symbol
-                )}'
-            )"
+            data-symbol="${escapeHtml(
+                symbol
+            )}"
         >
 
             <td>
                 ${rank}
             </td>
 
+
             <td>
 
-                <strong>
+                <div class="stock-symbol">
                     ${escapeHtml(
-                        stock.symbol
+                        symbol
                     )}
-                </strong>
+                </div>
 
-                ${
-                    stock.company_name
-                        ? `
-                            <div class="stock-company">
-                                ${escapeHtml(
-                                    stock.company_name
-                                )}
-                            </div>
-                        `
-                        : ""
-                }
-
-            </td>
-
-            <td>
-                ${portfolioSetupBadge(
-                    stock.setup
-                )}
-            </td>
-
-            <td class="trade-entry">
-                ${formatMoney(
-                    stock.entry_price
-                )}
-            </td>
-
-            <td class="trade-stop">
-                ${formatMoney(
-                    stock.stop_loss
-                )}
-            </td>
-
-            <td class="trade-target">
-                ${formatMoney(
-                    stock.target_1
-                )}
-            </td>
-
-            <td class="trade-target">
-                ${formatMoney(
-                    stock.target_2
-                )}
-            </td>
-
-            <td class="${portfolioRRClass(
-                rr
-            )}">
-                ${formatRR(rr)}
-            </td>
-
-            <td>
-                ${formatInteger(
-                    stock.quantity
-                )}
-            </td>
-
-            <td>
-                ${formatMoney(
-                    stock.investment
-                )}
-            </td>
-
-            <td class="negative">
-                ${formatMoney(
-                    stock.stock_risk
-                )}
                 <small>
-                    ${formatPercent(
-                        stock.risk_percent
+                    ${escapeHtml(
+                        stock.company_name ||
+                        ""
                     )}
                 </small>
+
             </td>
 
-            <td class="positive">
-                ${formatMoney(
-                    stock.expected_profit_t1
-                )}
-            </td>
-
-            <td class="positive">
-                ${formatMoney(
-                    stock.expected_profit_t2
-                )}
-            </td>
 
             <td>
                 <strong>
@@ -1349,336 +1758,245 @@ function renderPortfolioRow(
                 </strong>
             </td>
 
-        </tr>
-    `;
-}
 
-// ============================================================
-// NOTES
-// ============================================================
+            <td>
+                ${statusBadge(
+                    stock.setup ||
+                    stock.trade_plan_type
+                )}
+            </td>
 
-function renderPortfolioNotes(
-    portfolio
-) {
-    const container =
-        document.getElementById(
-            "portfolioNotes"
-        );
 
-    if (!container) return;
+            <td class="trade-entry">
+                ${formatMoney(
+                    stock._entry
+                )}
+            </td>
 
-    const riskExceeded =
-        isFiniteNumber(
-            portfolio.maxRiskPct
-        ) &&
-        portfolio.riskPercent >
-        portfolio.maxRiskPct;
 
-    container.innerHTML = `
+            <td class="trade-stop">
+                ${formatMoney(
+                    stock._stop
+                )}
+            </td>
 
-        <div class="portfolio-disclaimer">
 
-            <strong>
-                Portfolio methodology
-            </strong>
+            <td class="trade-target">
+                ${formatMoney(
+                    stock._target1
+                )}
+            </td>
 
-            <ul>
 
-                <li>
-                    Stock selection uses the
-                    dashboard's ranking engine.
-                </li>
-
-                <li>
-                    Entry, Stop Loss, Target 1,
-                    Target 2 and Risk/Reward are
-                    taken directly from the
-                    engine-generated trade plan.
-                </li>
-
-                <li>
-                    The Portfolio Builder does
-                    not apply a blanket 10% stop
-                    loss.
-                </li>
-
-                <li>
-                    Quantity is calculated using
-                    equal capital allocation.
-                </li>
-
-                <li>
-                    Maximum planned loss assumes
-                    every selected position reaches
-                    its engine-defined stop loss.
-                </li>
-
-                <li>
-                    Target profits are scenario
-                    calculations, not guaranteed
-                    returns.
-                </li>
-
+            <td class="trade-target">
                 ${
-                    riskExceeded
-                        ? `
-                            <li class="risk-warning">
-                                Planned portfolio risk
-                                is above the selected
-                                ${formatPercent(
-                                    portfolio.maxRiskPct
-                                )}
-                                risk threshold.
-                            </li>
-                        `
-                        : ""
+                    Number.isFinite(
+                        stock._target2
+                    )
+                        ?
+                        formatMoney(
+                            stock._target2
+                        )
+                        :
+                        "—"
                 }
+            </td>
 
-            </ul>
 
-            <p>
-                This dashboard is an analytical
-                decision-support tool and not
-                investment advice.
-            </p>
+            <td class="${riskRewardClass(
+                stock._rr
+            )}">
+                ${formatRiskReward(
+                    stock._rr
+                )}
+            </td>
 
-        </div>
+
+            <td>
+                ${formatInteger(
+                    stock.quantity
+                )}
+            </td>
+
+
+            <td>
+                ${formatMoney(
+                    stock.investment
+                )}
+            </td>
+
+
+            <td>
+                ${formatPercent(
+                    stock.allocation_pct
+                )}
+            </td>
+
+
+            <td class="negative">
+                ${formatMoney(
+                    stock.risk_amount
+                )}
+            </td>
+
+
+            <td>
+                ${escapeHtml(
+                    normalizeSector(
+                        stock
+                    )
+                )}
+            </td>
+
+        </tr>
+
     `;
+
 }
 
+
 // ============================================================
-// EMPTY STATE
+// STOCK ROW EVENTS
 // ============================================================
 
-function renderPortfolioEmptyState() {
-    const summary =
-        document.getElementById(
-            "portfolioSummary"
+function bindPortfolioStockRows() {
+
+    const rows =
+        document.querySelectorAll(
+            ".portfolio-stock-row"
         );
 
-    const table =
-        document.getElementById(
-            "portfolioTable"
-        );
 
-    const notes =
-        document.getElementById(
-            "portfolioNotes"
-        );
+    rows.forEach(
+        row => {
 
-    if (summary) {
-        summary.innerHTML = "";
-    }
+            row.addEventListener(
+                "click",
+                () => {
 
-    if (table) {
-        table.innerHTML = `
+                    const symbol =
+                        row.dataset.symbol;
 
-            <div class="empty-state">
 
-                <h3>
-                    No suitable portfolio
-                    candidates
-                </h3>
+                    if (
+                        typeof openStockDetail ===
+                        "function"
+                    ) {
 
-                <p>
-                    No stocks currently meet
-                    the selected score,
-                    technical and trade-plan
-                    requirements.
-                </p>
+                        openStockDetail(
+                            symbol
+                        );
 
-                <p>
-                    Try lowering the minimum
-                    score or increasing the
-                    number of stocks.
-                </p>
+                    }
+                    else if (
+                        typeof openPortfolioStock ===
+                        "function"
+                    ) {
 
-            </div>
-        `;
-    }
+                        openPortfolioStock(
+                            symbol
+                        );
 
-    if (notes) {
-        notes.innerHTML = `
-            <div class="portfolio-disclaimer">
-                Portfolio Builder only selects
-                stocks with a valid engine-generated
-                trade plan.
-            </div>
-        `;
-    }
+                    }
+
+                }
+            );
+
+        }
+    );
+
 }
 
-function showPortfolioMessage(
-    message
-) {
-    const container =
-        document.getElementById(
-            "portfolioBuilder"
-        );
-
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="empty-state">
-            ${escapeHtml(message)}
-        </div>
-    `;
-}
-
-// ============================================================
-// OPEN STOCK
-// ============================================================
 
 function openPortfolioStock(
     symbol
 ) {
+
     if (
         typeof openStockDetail ===
         "function"
     ) {
-        openStockDetail(symbol);
+
+        openStockDetail(
+            symbol
+        );
+
     }
+
 }
 
+
+window.openPortfolioStock =
+    openPortfolioStock;
+
+
 // ============================================================
-// EXCEL EXPORT
+// EXPORT
 // ============================================================
 
 function exportPortfolio() {
-    if (
-        typeof dashboardData ===
-        "undefined" ||
-        !dashboardData
-    ) {
-        return;
-    }
-
-    const amount =
-        getInputNumber(
-            "portfolioAmount",
-            100000
-        );
-
-    const stockCount =
-        getInputNumber(
-            "portfolioStockCount",
-            10
-        );
-
-    const minimumScore =
-        getInputNumber(
-            "portfolioMinScore",
-            50
-        );
-
-    const maxRiskPct =
-        getInputNumber(
-            "portfolioMaxRisk",
-            2
-        );
-
-    const candidates =
-        getPortfolioCandidates(
-            minimumScore
-        );
-
-    const selected =
-        selectPortfolioStocks(
-            candidates,
-            stockCount
-        );
-
-    const portfolio =
-        calculatePortfolio(
-            selected,
-            amount,
-            maxRiskPct
-        );
 
     if (
-        portfolio.stocks.length === 0
+        !portfolioResult
+        ||
+        !Array.isArray(
+            portfolioResult.stocks
+        )
+        ||
+        portfolioResult.stocks.length === 0
     ) {
-        alert(
-            "No portfolio positions available for export."
-        );
 
         return;
+
     }
 
-    /*
-     * If SheetJS is available,
-     * generate a real XLSX file.
-     */
-    if (
-        typeof XLSX !==
-        "undefined"
-    ) {
-        exportWithSheetJS(
-            portfolio
-        );
 
-        return;
-    }
-
-    /*
-     * Fallback:
-     * create a CSV that Excel can open.
-     */
-    exportPortfolioCSV(
-        portfolio
-    );
-}
-
-function exportWithSheetJS(
-    portfolio
-) {
     const rows =
-        portfolio.stocks.map(
-            (stock, index) => ({
+        portfolioResult.stocks.map(
+            (
+                stock,
+                index
+            ) => ({
+
                 Rank:
                     index + 1,
 
                 Symbol:
-                    stock.symbol,
+                    getSymbol(
+                        stock
+                    ),
 
                 Company:
-                    stock.company_name,
+                    stock.company_name ||
+                    "",
 
                 Sector:
-                    stock.sector,
+                    normalizeSector(
+                        stock
+                    ),
+
+                Score:
+                    stock.overall_score,
 
                 Setup:
-                    stock.setup,
-
-                Trade_Plan:
-                    stock.trade_plan_type,
-
-                Status:
-                    stock.trade_plan_status,
+                    stock.setup ||
+                    stock.trade_plan_type ||
+                    "",
 
                 Entry:
-                    stock.entry_price,
-
-                Entry_Low:
-                    stock.entry_low,
-
-                Entry_High:
-                    stock.entry_high,
+                    stock._entry,
 
                 Stop_Loss:
-                    stock.stop_loss,
+                    stock._stop,
 
                 Target_1:
-                    stock.target_1,
+                    stock._target1,
 
                 Target_2:
-                    stock.target_2,
+                    stock._target2,
 
-                Risk_Reward_T1:
-                    stock.risk_reward_1,
-
-                Risk_Reward_T2:
-                    stock.risk_reward_2,
+                Risk_Reward:
+                    stock._rr,
 
                 Quantity:
                     stock.quantity,
@@ -1686,423 +2004,477 @@ function exportWithSheetJS(
                 Investment:
                     stock.investment,
 
-                Portfolio_Weight:
-                    stock.portfolio_weight,
+                Allocation_Percent:
+                    stock.allocation_pct,
 
                 Risk:
-                    stock.stock_risk,
+                    stock.risk_amount,
 
-                Risk_Percent:
-                    stock.risk_percent,
+                Reward_Target_1:
+                    stock.reward1_amount,
 
-                Expected_Profit_T1:
-                    stock.expected_profit_t1,
+                Reward_Target_2:
+                    stock.reward2_amount
 
-                Expected_Profit_T2:
-                    stock.expected_profit_t2,
-
-                Overall_Score:
-                    stock.overall_score,
-
-                Technical_Score:
-                    stock.technical_score,
-
-                Fundamental_Score:
-                    stock.fundamental_score,
-
-                Sector_Score:
-                    stock.sector_score,
-
-                Trade_Quality:
-                    stock.trade_plan_quality,
-
-                Invalidation:
-                    stock.invalidation
             })
         );
 
-    const worksheet =
-        XLSX.utils.json_to_sheet(
+
+    // --------------------------------------------------------
+    // SheetJS if available
+    // --------------------------------------------------------
+
+    if (
+        typeof XLSX !==
+        "undefined"
+    ) {
+
+        const worksheet =
+            XLSX.utils.json_to_sheet(
+                rows
+            );
+
+
+        const workbook =
+            XLSX.utils.book_new();
+
+
+        XLSX.utils.book_append_sheet(
+            workbook,
+            worksheet,
+            "Portfolio"
+        );
+
+
+        XLSX.writeFile(
+            workbook,
+            "NSE_Smart_Portfolio.xlsx"
+        );
+
+
+        return;
+
+    }
+
+
+    // --------------------------------------------------------
+    // CSV fallback
+    // --------------------------------------------------------
+
+    const csv =
+        convertToCSV(
             rows
         );
 
-    const workbook =
-        XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        "Portfolio"
-    );
-
-    XLSX.writeFile(
-        workbook,
-        "NSE_Smart_Portfolio.xlsx"
-    );
-}
-
-function exportPortfolioCSV(
-    portfolio
-) {
-    const headers = [
-        "Rank",
-        "Symbol",
-        "Company",
-        "Sector",
-        "Setup",
-        "Trade Plan",
-        "Status",
-        "Entry",
-        "Entry Low",
-        "Entry High",
-        "Stop Loss",
-        "Target 1",
-        "Target 2",
-        "Risk Reward T1",
-        "Risk Reward T2",
-        "Quantity",
-        "Investment",
-        "Portfolio Weight %",
-        "Risk",
-        "Risk %",
-        "Expected Profit T1",
-        "Expected Profit T2",
-        "Overall Score",
-        "Technical Score",
-        "Fundamental Score",
-        "Sector Score",
-        "Trade Quality",
-        "Invalidation"
-    ];
-
-    const rows =
-        portfolio.stocks.map(
-            (stock, index) => [
-
-                index + 1,
-
-                stock.symbol,
-
-                stock.company_name,
-
-                stock.sector,
-
-                stock.setup,
-
-                stock.trade_plan_type,
-
-                stock.trade_plan_status,
-
-                stock.entry_price,
-
-                stock.entry_low,
-
-                stock.entry_high,
-
-                stock.stop_loss,
-
-                stock.target_1,
-
-                stock.target_2,
-
-                stock.risk_reward_1,
-
-                stock.risk_reward_2,
-
-                stock.quantity,
-
-                stock.investment,
-
-                stock.portfolio_weight,
-
-                stock.stock_risk,
-
-                stock.risk_percent,
-
-                stock.expected_profit_t1,
-
-                stock.expected_profit_t2,
-
-                stock.overall_score,
-
-                stock.technical_score,
-
-                stock.fundamental_score,
-
-                stock.sector_score,
-
-                stock.trade_plan_quality,
-
-                stock.invalidation
-
-            ]
-        );
-
-    const csv =
-        [
-            headers,
-            ...rows
-        ]
-            .map(row =>
-                row
-                    .map(csvEscape)
-                    .join(",")
-            )
-            .join("\n");
 
     const blob =
         new Blob(
-            [csv],
+            [
+                csv
+            ],
             {
                 type:
                     "text/csv;charset=utf-8;"
             }
         );
 
+
     const url =
         URL.createObjectURL(
             blob
         );
+
 
     const link =
         document.createElement(
             "a"
         );
 
-    link.href = url;
+
+    link.href =
+        url;
+
 
     link.download =
         "NSE_Smart_Portfolio.csv";
+
 
     document.body.appendChild(
         link
     );
 
+
     link.click();
 
-    document.body.removeChild(
-        link
+
+    link.remove();
+
+
+    URL.revokeObjectURL(
+        url
     );
 
-    URL.revokeObjectURL(url);
 }
+
+
+window.exportPortfolio =
+    exportPortfolio;
+
+
+// ============================================================
+// ENABLE / DISABLE EXPORT
+// ============================================================
+
+function enableExport() {
+
+    const button =
+        document.getElementById(
+            "exportPortfolioButton"
+        );
+
+
+    if (button) {
+
+        button.disabled =
+            false;
+
+    }
+
+}
+
+
+function disableExport() {
+
+    const button =
+        document.getElementById(
+            "exportPortfolioButton"
+        );
+
+
+    if (button) {
+
+        button.disabled =
+            true;
+
+    }
+
+}
+
+
+// ============================================================
+// CSV
+// ============================================================
+
+function convertToCSV(
+    rows
+) {
+
+    if (
+        !rows.length
+    ) {
+
+        return "";
+
+    }
+
+
+    const headers =
+        Object.keys(
+            rows[0]
+        );
+
+
+    const lines = [
+
+        headers.join(",")
+
+    ];
+
+
+    rows.forEach(
+        row => {
+
+            const values =
+                headers.map(
+                    header =>
+                        csvEscape(
+                            row[
+                                header
+                            ]
+                        )
+                );
+
+
+            lines.push(
+                values.join(",")
+            );
+
+        }
+    );
+
+
+    return lines.join(
+        "\n"
+    );
+
+}
+
 
 function csvEscape(
     value
 ) {
+
     if (
         value === null ||
         value === undefined
     ) {
+
         return "";
+
     }
 
+
     const text =
-        String(value);
+        String(
+            value
+        );
+
 
     if (
-        text.includes(",") ||
-        text.includes('"') ||
+        text.includes(",")
+        ||
+        text.includes('"')
+        ||
         text.includes("\n")
     ) {
+
         return (
+
             '"' +
+
             text.replace(
                 /"/g,
                 '""'
-            ) +
+            )
+
+            +
+
             '"'
+
         );
+
     }
+
 
     return text;
+
 }
+
 
 // ============================================================
-// UI HELPERS
+// HELPERS
 // ============================================================
 
-function portfolioSetupBadge(
-    value
+function getSymbol(
+    stock
 ) {
-    if (!value) {
-        return "—";
-    }
 
-    const text =
-        String(value)
-            .toLowerCase();
+    return String(
+        firstValue(
+            stock.symbol,
+            stock.nse_symbol,
+            stock.Symbol,
+            ""
+        )
+    );
 
-    let cls =
-        "setup-neutral";
-
-    if (
-        text.includes("strong") ||
-        text.includes("confirmed")
-    ) {
-        cls =
-            "setup-positive";
-    } else if (
-        text.includes(
-            "confirmation"
-        ) ||
-        text.includes(
-            "pre-breakout"
-        ) ||
-        text.includes("momentum") ||
-        text.includes("52w") ||
-        text.includes("dma")
-    ) {
-        cls =
-            "setup-watch";
-    } else if (
-        text.includes("weak") ||
-        text.includes("avoid")
-    ) {
-        cls =
-            "setup-negative";
-    }
-
-    return `
-        <span class="setup-badge ${cls}">
-            ${escapeHtml(value)}
-        </span>
-    `;
 }
 
-function portfolioRRClass(
-    value
+
+function normalizeSector(
+    stock
 ) {
-    if (
-        !isFiniteNumber(value)
-    ) {
-        return "";
-    }
 
-    const rr =
-        Number(value);
+    return String(
+        firstValue(
+            stock.primary_sector,
+            stock.sector,
+            stock.Sector,
+            "Unknown"
+        )
+    );
 
-    if (
-        rr >= 2
-    ) {
-        return "positive";
-    }
-
-    if (
-        rr >= 1.5
-    ) {
-        return "neutral";
-    }
-
-    return "negative";
 }
 
-function getRiskStatus(
-    risk,
-    maximum
+
+function getTradeValue(
+    stock,
+    fields
 ) {
-    if (
-        !isFiniteNumber(risk)
+
+    for (
+        const field of fields
     ) {
-        return {
-            label: "Unavailable",
-            description:
-                "Risk could not be calculated."
-        };
+
+        const value =
+            Number(
+                stock[
+                    field
+                ]
+            );
+
+
+        if (
+            Number.isFinite(
+                value
+            )
+        ) {
+
+            return value;
+
+        }
+
     }
 
-    if (
-        !isFiniteNumber(maximum)
-    ) {
-        return {
-            label: "Calculated",
-            description:
-                "Based on engine-defined stops."
-        };
-    }
 
-    if (
-        risk <= maximum
-    ) {
-        return {
-            label: "Within Limit",
-            description:
-                `≤ ${formatPercent(
-                    maximum
-                )}`
-        };
-    }
+    return null;
 
-    return {
-        label: "Above Limit",
-        description:
-            `> ${formatPercent(
-                maximum
-            )}`
-    };
 }
 
-// ============================================================
-// INPUT HELPERS
-// ============================================================
 
-function getInputNumber(
-    id,
-    fallback
+function calculateRiskReward(
+    entry,
+    stop,
+    target
 ) {
-    const element =
-        document.getElementById(id);
-
-    if (!element) {
-        return fallback;
-    }
-
-    const value =
-        Number(
-            element.value
-        );
 
     if (
-        !Number.isFinite(value)
+        !Number.isFinite(
+            entry
+        )
+        ||
+        !Number.isFinite(
+            stop
+        )
+        ||
+        !Number.isFinite(
+            target
+        )
     ) {
-        return fallback;
+
+        return null;
+
     }
 
-    return value;
+
+    const risk =
+        entry -
+        stop;
+
+
+    const reward =
+        target -
+        entry;
+
+
+    if (
+        risk <= 0
+        ||
+        reward <= 0
+    ) {
+
+        return null;
+
+    }
+
+
+    return (
+        reward /
+        risk
+    );
+
 }
 
-function firstNumber(
+
+function averageScore(
+    stocks
+) {
+
+    if (
+        !stocks.length
+    ) {
+
+        return null;
+
+    }
+
+
+    const scores =
+        stocks
+            .map(
+                stock =>
+                    Number(
+                        stock.overall_score
+                    )
+            )
+            .filter(
+                Number.isFinite
+            );
+
+
+    if (
+        !scores.length
+    ) {
+
+        return null;
+
+    }
+
+
+    return (
+        scores.reduce(
+            (
+                sum,
+                value
+            ) =>
+                sum +
+                value,
+            0
+        )
+        /
+        scores.length
+    );
+
+}
+
+
+function firstValue(
     ...values
 ) {
+
     for (
         const value of values
     ) {
+
         if (
-            isFiniteNumber(value)
+            value !== undefined
+            &&
+            value !== null
+            &&
+            value !== ""
         ) {
-            return Number(value);
+
+            return value;
+
         }
+
     }
+
 
     return null;
+
 }
 
-function isFiniteNumber(
-    value
-) {
-    if (
-        value === null ||
-        value === undefined ||
-        value === "" ||
-        typeof value === "boolean"
-    ) {
-        return false;
-    }
-
-    return Number.isFinite(
-        Number(value)
-    );
-}
 
 // ============================================================
 // FORMATTING
@@ -2111,103 +2483,308 @@ function isFiniteNumber(
 function formatMoney(
     value
 ) {
+
     if (
-        !isFiniteNumber(value)
+        !Number.isFinite(
+            Number(value)
+        )
     ) {
+
         return "—";
+
     }
+
 
     return (
+
         "₹" +
-        Number(value)
-            .toLocaleString(
-                "en-IN",
-                {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }
-            )
-    );
-}
 
-function formatNumber(
-    value,
-    decimals = 2
-) {
-    if (
-        !isFiniteNumber(value)
-    ) {
-        return "—";
-    }
-
-    return Number(value)
-        .toLocaleString(
+        Number(
+            value
+        ).toLocaleString(
             "en-IN",
             {
                 minimumFractionDigits:
-                    decimals,
+                    2,
 
                 maximumFractionDigits:
-                    decimals
+                    2
             }
-        );
+        )
+
+    );
+
 }
+
+
+function formatNumber(
+    value
+) {
+
+    if (
+        !Number.isFinite(
+            Number(value)
+        )
+    ) {
+
+        return "—";
+
+    }
+
+
+    return Number(
+        value
+    ).toLocaleString(
+        "en-IN",
+        {
+            minimumFractionDigits:
+                2,
+
+            maximumFractionDigits:
+                2
+        }
+    );
+
+}
+
 
 function formatInteger(
     value
 ) {
+
     if (
-        !isFiniteNumber(value)
+        !Number.isFinite(
+            Number(value)
+        )
     ) {
+
         return "—";
+
     }
 
-    return Math.floor(
-        Number(value)
+
+    return Number(
+        value
     ).toLocaleString(
-        "en-IN"
+        "en-IN",
+        {
+            maximumFractionDigits:
+                0
+        }
     );
+
 }
+
 
 function formatPercent(
     value
 ) {
+
     if (
-        !isFiniteNumber(value)
+        !Number.isFinite(
+            Number(value)
+        )
     ) {
+
         return "—";
+
     }
 
+
     return (
-        Number(value).toFixed(2) +
+
+        Number(
+            value
+        ).toFixed(2)
+
+        +
+
         "%"
+
     );
+
 }
 
-function formatRR(
+
+function formatRiskReward(
     value
 ) {
+
     if (
-        !isFiniteNumber(value)
+        !Number.isFinite(
+            Number(value)
+        )
     ) {
+
         return "—";
+
     }
 
+
     return (
-        Number(value).toFixed(2) +
-        "x"
+
+        "1:" +
+
+        Number(
+            value
+        ).toFixed(2)
+
     );
+
 }
 
-// ============================================================
-// SECURITY
-// ============================================================
+
+function riskRewardClass(
+    value
+) {
+
+    if (
+        !Number.isFinite(
+            Number(value)
+        )
+    ) {
+
+        return "neutral";
+
+    }
+
+
+    const rr =
+        Number(value);
+
+
+    if (
+        rr >= 2
+    ) {
+
+        return "positive";
+
+    }
+
+
+    if (
+        rr >= 1.5
+    ) {
+
+        return "neutral";
+
+    }
+
+
+    return "negative";
+
+}
+
+
+function statusBadge(
+    value
+) {
+
+    if (
+        value === undefined
+        ||
+        value === null
+        ||
+        value === ""
+    ) {
+
+        return "—";
+
+    }
+
+
+    const text =
+        String(
+            value
+        );
+
+
+    const lower =
+        text.toLowerCase();
+
+
+    let className =
+        "badge-neutral";
+
+
+    if (
+        lower.includes(
+            "strong"
+        )
+        ||
+        lower.includes(
+            "confirmed"
+        )
+        ||
+        lower.includes(
+            "bullish"
+        )
+        ||
+        lower.includes(
+            "positive"
+        )
+        ||
+        lower.includes(
+            "breakout"
+        )
+    ) {
+
+        className =
+            "badge-positive";
+
+    }
+    else if (
+        lower.includes(
+            "avoid"
+        )
+        ||
+        lower.includes(
+            "weak"
+        )
+        ||
+        lower.includes(
+            "bearish"
+        )
+    ) {
+
+        className =
+            "badge-negative";
+
+    }
+
+
+    return `
+
+        <span
+            class="status-badge ${className}"
+        >
+            ${escapeHtml(
+                text
+            )}
+        </span>
+
+    `;
+
+}
+
 
 function escapeHtml(
     value
 ) {
+
+    if (
+        value === undefined
+        ||
+        value === null
+    ) {
+
+        return "";
+
+    }
+
+
     return String(
-        value ?? ""
+        value
     )
         .replace(
             /&/g,
@@ -2229,40 +2806,5 @@ function escapeHtml(
             /'/g,
             "&#039;"
         );
+
 }
-
-function escapePortfolioJs(
-    value
-) {
-    return String(
-        value ?? ""
-    )
-        .replace(
-            /\\/g,
-            "\\\\"
-        )
-        .replace(
-            /'/g,
-            "\\'"
-        );
-}
-
-// ============================================================
-// GLOBAL EXPORTS
-// ============================================================
-
-window.initializePortfolioBuilder =
-    initializePortfolioBuilder;
-
-window.buildPortfolio =
-    buildPortfolio;
-
-window.exportPortfolio =
-    exportPortfolio;
-
-window.openPortfolioStock =
-    openPortfolioStock;
-
-// ============================================================
-// END
-// ============================================================
