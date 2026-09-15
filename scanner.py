@@ -1,3 +1,9 @@
+# ============================================================
+# NSE SMART MARKET DASHBOARD V2
+# MASTER PRODUCTION SCANNER
+# Created by Rakesh Nagapuri
+# ============================================================
+
 import json
 import math
 from pathlib import Path
@@ -7,52 +13,61 @@ import pandas as pd
 import yfinance as yf
 
 from engines.nse_universe import get_nse_universe, save_universe
-from engines.market_breadth import (
-    get_market_breadth,
-    display_breadth
-)
-from engines.market_engine import (
-    get_market_regime,
-    display_market
-)
-from engines.sector_engine import (
-    get_sector_analysis
-)
-from engines.technical_engine import (
-    calculate_technical_indicators
-)
+from engines.technical_engine import calculate_technical_indicators
+from engines.market_breadth import get_market_breadth
+from engines.market_engine import get_market_regime
+from engines.sector_engine import get_sector_analysis
 from engines.ranking_engine import (
     rank_stocks,
-    create_setup_summary,
-    create_watchlists
+    create_watchlists,
+    create_setup_summary
 )
-from engines.fundamental_engine import (
-    get_fundamentals
-)
+from engines.fundamental_engine import get_fundamentals
 
 
 # ============================================================
-# NSE SMART MARKET DASHBOARD
-# MASTER PRODUCTION SCANNER
+# CONFIGURATION
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR = Path("output")
+EXPORT_DIR = OUTPUT_DIR / "exports"
 
-TECHNICAL_FILE = OUTPUT_DIR / "stocks.csv"
-MARKET_FILE = OUTPUT_DIR / "market_regime.csv"
-BREADTH_FILE = OUTPUT_DIR / "market_breadth.csv"
-SECTOR_FILE = OUTPUT_DIR / "sector_analysis.csv"
-SUMMARY_FILE = OUTPUT_DIR / "setup_summary.csv"
-JSON_FILE = OUTPUT_DIR / "dashboard_data.json"
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+EXPORT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 BATCH_SIZE = 100
-DOWNLOAD_PERIOD = "2y"
+TECHNICAL_PERIOD = "2y"
 
 
 # ============================================================
-# GENERAL HELPERS
+# HELPERS
 # ============================================================
+
+def safe_float(value):
+
+    try:
+
+        if value is None:
+            return np.nan
+
+        value = float(value)
+
+        if not math.isfinite(value):
+            return np.nan
+
+        return value
+
+    except (TypeError, ValueError):
+
+        return np.nan
+
 
 def clean_value(value):
 
@@ -64,859 +79,67 @@ def clean_value(value):
 
     if isinstance(value, (np.floating,)):
 
-        if np.isnan(value) or np.isinf(value):
+        if not np.isfinite(value):
             return None
 
         return float(value)
 
     if isinstance(value, float):
 
-        if math.isnan(value) or math.isinf(value):
+        if not math.isfinite(value):
             return None
 
         return value
 
-    if pd.isna(value):
-        return None
+    if isinstance(value, bool):
+        return value
+
+    try:
+
+        if pd.isna(value):
+            return None
+
+    except Exception:
+        pass
 
     return value
 
 
-def clean_dataframe(df):
+def clean_dataframe_for_json(df):
 
     if df is None or df.empty:
-        return df
+        return []
 
-    df = df.copy()
+    records = []
 
-    for column in df.columns:
-
-        if pd.api.types.is_numeric_dtype(
-            df[column]
-        ):
-
-            df[column] = df[column].replace(
-                [np.inf, -np.inf],
-                np.nan
-            )
-
-    return df
-
-
-# ============================================================
-# TECHNICAL BATCH DOWNLOAD
-# ============================================================
-
-def download_batch(symbols):
-
-    if not symbols:
-        return pd.DataFrame()
-
-    try:
-
-        data = yf.download(
-            symbols,
-            period=DOWNLOAD_PERIOD,
-            interval="1d",
-            auto_adjust=False,
-            progress=False,
-            group_by="ticker",
-            threads=True
-        )
-
-        return data
-
-    except Exception as e:
-
-        print(
-            f"Technical batch download error: {e}"
-        )
-
-        return pd.DataFrame()
-
-
-# ============================================================
-# EXTRACT INDIVIDUAL STOCK DATA
-# ============================================================
-
-def extract_stock_data(
-    batch_data,
-    symbol
-):
-
-    if (
-        batch_data is None
-        or batch_data.empty
+    for record in df.to_dict(
+        orient="records"
     ):
 
-        return pd.DataFrame()
-
-    try:
-
-        if isinstance(
-            batch_data.columns,
-            pd.MultiIndex
-        ):
-
-            level_zero = (
-                batch_data
-                .columns
-                .get_level_values(0)
-            )
-
-            level_one = (
-                batch_data
-                .columns
-                .get_level_values(1)
-            )
-
-            # yfinance can return either:
-            #
-            # ticker -> OHLCV
-            # or
-            # OHLCV -> ticker
-
-            if symbol in level_zero:
-
-                data = batch_data[
-                    symbol
-                ].copy()
-
-            elif symbol in level_one:
-
-                data = (
-                    batch_data
-                    .xs(
-                        symbol,
-                        axis=1,
-                        level=1
-                    )
-                    .copy()
-                )
-
-            else:
-
-                return pd.DataFrame()
-
-        else:
-
-            data = batch_data.copy()
-
-        required = [
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume"
-        ]
-
-        for column in required:
-
-            if column not in data.columns:
-
-                return pd.DataFrame()
-
-        data = data[
-            required
-        ].dropna(
-            subset=["Close"]
-        )
-
-        return data
-
-    except Exception as e:
-
-        print(
-            f"Extraction error {symbol}: {e}"
-        )
-
-        return pd.DataFrame()
-
-
-# ============================================================
-# SINGLE STOCK TECHNICAL ANALYSIS
-# ============================================================
-
-def analyze_stock(
-    data,
-    symbol
-):
-
-    if (
-        data is None
-        or data.empty
-        or len(data) < 200
-    ):
-
-        return None
-
-    try:
-
-        data = calculate_technical_indicators(
-            data
-        )
-
-        if data.empty:
-            return None
-
-        latest = data.iloc[-1]
-
-        result = {
-
-            "symbol":
-                symbol,
-
-            "price":
-                latest["Close"],
-
-            "previous_close":
-                latest["Previous_Close"],
-
-            "daily_return_pct":
-                latest["Daily_Return_Pct"],
-
-            "sma20":
-                latest["SMA20"],
-
-            "sma50":
-                latest["SMA50"],
-
-            "sma100":
-                latest["SMA100"],
-
-            "sma200":
-                latest["SMA200"],
-
-            "ema9":
-                latest["EMA9"],
-
-            "ema20":
-                latest["EMA20"],
-
-            "ema50":
-                latest["EMA50"],
-
-            "rsi14":
-                latest["RSI14"],
-
-            "atr14":
-                latest["ATR14"],
-
-            "atr_percent":
-                latest["ATR_Percent"],
-
-            "volume":
-                latest["Volume"],
-
-            "average_volume_20":
-                latest["Average_Volume_20"],
-
-            "volume_ratio":
-                latest["Volume_Ratio"],
-
-            "52w_high":
-                latest["52W_High"],
-
-            "52w_low":
-                latest["52W_Low"],
-
-            "distance_from_52w_high_pct":
-                latest[
-                    "Distance_From_52W_High_Pct"
-                ],
-
-            "distance_from_52w_low_pct":
-                latest[
-                    "Distance_From_52W_Low_Pct"
-                ],
-
-            "distance_from_200dma_pct":
-                latest[
-                    "Distance_From_200DMA_Pct"
-                ],
-
-            "above_200dma":
-                latest[
-                    "Above_200DMA"
-                ],
-
-            "support":
-                latest["Support"],
-
-            "resistance":
-                latest["Resistance"],
-
-            "trend":
-                latest["Trend"],
-
-            "momentum":
-                latest["Momentum"],
-
-            "breakout_status":
-                latest[
-                    "Breakout_Status"
-                ]
+        cleaned = {
+            str(key): clean_value(value)
+            for key, value in record.items()
         }
 
-        return result
+        records.append(cleaned)
 
-    except Exception as e:
-
-        print(
-            f"Technical analysis error "
-            f"{symbol}: {e}"
-        )
-
-        return None
+    return records
 
 
-# ============================================================
-# FULL NSE TECHNICAL SCAN
-# ============================================================
+def save_csv(df, filename):
 
-def run_technical_scan(
-    universe
-):
+    if df is None:
+        return
 
-    if (
-        universe is None
-        or universe.empty
-    ):
-
-        return pd.DataFrame()
-
-    symbols = (
-        universe[
-            "YAHOO_SYMBOL"
-        ]
-        .dropna()
-        .astype(str)
-        .unique()
-        .tolist()
-    )
-
-    results = []
-
-    total = len(symbols)
-
-    total_batches = math.ceil(
-        total / BATCH_SIZE
-    )
-
-    print()
-    print("=" * 60)
-    print("FULL NSE TECHNICAL SCAN")
-    print("=" * 60)
-    print(
-        f"Total securities: {total}"
-    )
-    print(
-        f"Batch size: {BATCH_SIZE}"
-    )
-    print("=" * 60)
-
-    for start in range(
-        0,
-        total,
-        BATCH_SIZE
-    ):
-
-        batch = symbols[
-            start:
-            start + BATCH_SIZE
-        ]
-
-        batch_number = (
-            start // BATCH_SIZE
-        ) + 1
-
-        print()
-        print(
-            f"Batch "
-            f"{batch_number}/"
-            f"{total_batches}"
-        )
+    if df.empty:
 
         print(
-            f"Stocks "
-            f"{start + 1}-"
-            f"{min(start + BATCH_SIZE, total)}"
+            f"Skipping empty file: {filename}"
         )
-
-        batch_data = download_batch(
-            batch
-        )
-
-        if (
-            batch_data is None
-            or batch_data.empty
-        ):
-
-            print(
-                "No data returned."
-            )
-
-            continue
-
-        for symbol in batch:
-
-            data = extract_stock_data(
-                batch_data,
-                symbol
-            )
-
-            result = analyze_stock(
-                data,
-                symbol
-            )
-
-            if result is not None:
-
-                results.append(
-                    result
-                )
-
-    if not results:
-
-        return pd.DataFrame()
-
-    df = pd.DataFrame(
-        results
-    )
-
-    df = clean_dataframe(
-        df
-    )
-
-    print()
-    print(
-        f"Technical stocks analyzed: "
-        f"{len(df)}"
-    )
-
-    return df
-
-
-# ============================================================
-# ADD NSE MASTER DATA
-# ============================================================
-
-def enrich_with_universe(
-    stock_data,
-    universe
-):
-
-    if (
-        stock_data is None
-        or stock_data.empty
-    ):
-
-        return stock_data
-
-    if (
-        universe is None
-        or universe.empty
-    ):
-
-        return stock_data
-
-    columns = [
-        "SYMBOL",
-        "YAHOO_SYMBOL"
-    ]
-
-    available = [
-        column
-        for column in columns
-        if column in universe.columns
-    ]
-
-    if len(available) < 2:
-
-        return stock_data
-
-    mapping = (
-        universe[available]
-        .drop_duplicates(
-            "YAHOO_SYMBOL"
-        )
-    )
-
-    df = stock_data.merge(
-        mapping,
-        left_on="symbol",
-        right_on="YAHOO_SYMBOL",
-        how="left"
-    )
-
-    if "SYMBOL" in df.columns:
-
-        df["nse_symbol"] = df[
-            "SYMBOL"
-        ]
-
-    else:
-
-        df["nse_symbol"] = (
-            df["symbol"]
-            .str.replace(
-                ".NS",
-                "",
-                regex=False
-            )
-        )
-
-    return df
-
-
-# ============================================================
-# FUNDAMENTAL SHORTLIST
-# ============================================================
-
-def create_fundamental_shortlist(
-    ranked
-):
-
-    if (
-        ranked is None
-        or ranked.empty
-    ):
-
-        return []
-
-    df = ranked.copy()
-
-    candidates = pd.DataFrame()
-
-    # Top technically ranked stocks
-    top_technical = (
-        df.sort_values(
-            "technical_score",
-            ascending=False
-        )
-        .head(300)
-    )
-
-    # Stocks close to 52W high
-    high_candidates = df[
-        df[
-            "distance_from_52w_high_pct"
-        ].between(
-            -10,
-            0
-        )
-    ].head(150)
-
-    # Stocks around 200 DMA
-    dma_candidates = df[
-        df[
-            "distance_from_200dma_pct"
-        ].between(
-            -7,
-            7
-        )
-    ].head(150)
-
-    # Momentum candidates
-    momentum_candidates = df[
-        df[
-            "momentum"
-        ].isin(
-            [
-                "Positive",
-                "Strong Positive"
-            ]
-        )
-    ].head(150)
-
-    candidates = pd.concat(
-        [
-            top_technical,
-            high_candidates,
-            dma_candidates,
-            momentum_candidates
-        ],
-        ignore_index=True
-    )
-
-    if candidates.empty:
-        return []
-
-    symbols = (
-        candidates[
-            "symbol"
-        ]
-        .dropna()
-        .astype(str)
-        .unique()
-        .tolist()
-    )
-
-    # Keep the fundamental request
-    # bounded for daily GitHub Actions.
-    return symbols[:500]
-
-
-# ============================================================
-# MERGE FUNDAMENTALS
-# ============================================================
-
-def merge_fundamentals(
-    ranked,
-    fundamentals
-):
-
-    if (
-        ranked is None
-        or ranked.empty
-    ):
-
-        return ranked
-
-    if (
-        fundamentals is None
-        or fundamentals.empty
-    ):
-
-        ranked[
-            "fundamental_score"
-        ] = np.nan
-
-        ranked[
-            "fundamental_quality"
-        ] = "Data Unavailable"
-
-        ranked[
-            "fundamental_data_available"
-        ] = False
-
-        return ranked
-
-    fundamentals = fundamentals.copy()
-
-    fundamentals = (
-        fundamentals
-        .drop_duplicates(
-            "symbol"
-        )
-    )
-
-    # Do not duplicate sector columns.
-    sector_columns = [
-        "sector",
-        "industry"
-    ]
-
-    columns_to_drop = [
-        column
-        for column in sector_columns
-        if column in ranked.columns
-        and column in fundamentals.columns
-    ]
-
-    fundamentals = fundamentals.drop(
-        columns=columns_to_drop,
-        errors="ignore"
-    )
-
-    merged = ranked.merge(
-        fundamentals,
-        on="symbol",
-        how="left",
-        suffixes=("", "_fundamental")
-    )
-
-    # --------------------------------------------------------
-    # Recalculate final score now that fundamentals exist.
-    # --------------------------------------------------------
-
-    if "fundamental_score" in merged.columns:
-
-        def final_score(row):
-
-            technical = row.get(
-                "technical_score",
-                np.nan
-            )
-
-            fundamental = row.get(
-                "fundamental_score",
-                np.nan
-            )
-
-            sector = row.get(
-                "sector_score",
-                np.nan
-            )
-
-            if pd.isna(technical):
-
-                return np.nan
-
-            # Technical-only if fundamentals unavailable.
-            if pd.isna(fundamental):
-
-                adjustment = 0
-
-                if not pd.isna(sector):
-
-                    if sector >= 75:
-                        adjustment = 5
-
-                    elif sector >= 60:
-                        adjustment = 3
-
-                    elif sector < 30:
-                        adjustment = -5
-
-                    elif sector < 45:
-                        adjustment = -3
-
-                return round(
-                    max(
-                        0,
-                        min(
-                            100,
-                            technical
-                            + adjustment
-                        )
-                    ),
-                    2
-                )
-
-            return round(
-                max(
-                    0,
-                    min(
-                        100,
-                        technical * 0.60
-                        + fundamental * 0.40
-                    )
-                ),
-                2
-            )
-
-        merged[
-            "overall_rating"
-        ] = merged.apply(
-            final_score,
-            axis=1
-        )
-
-        merged[
-            "rating"
-        ] = merged[
-            "overall_rating"
-        ]
-
-        merged[
-            "total_score"
-        ] = merged[
-            "overall_rating"
-        ]
-
-    if (
-        "fundamental_data_available"
-        not in merged.columns
-    ):
-
-        merged[
-            "fundamental_data_available"
-        ] = (
-            merged[
-                "fundamental_score"
-            ].notna()
-        )
-
-    return merged
-
-
-# ============================================================
-# FINAL RANKING
-# ============================================================
-
-def finalize_ranking(
-    stock_data,
-    sector_data,
-    fundamentals
-):
-
-    if (
-        stock_data is None
-        or stock_data.empty
-    ):
-
-        return pd.DataFrame()
-
-    ranked = rank_stocks(
-        stock_data,
-        sector_data=sector_data
-    )
-
-    if ranked.empty:
-
-        return ranked
-
-    ranked = merge_fundamentals(
-        ranked,
-        fundamentals
-    )
-
-    ranked = ranked.sort_values(
-        [
-            "overall_rating",
-            "technical_score"
-        ],
-        ascending=False
-    ).reset_index(
-        drop=True
-    )
-
-    ranked[
-        "rank"
-    ] = ranked.index + 1
-
-    ranked[
-        "technical_rank"
-    ] = (
-        ranked[
-            "technical_score"
-        ]
-        .rank(
-            ascending=False,
-            method="min"
-        )
-        .astype(int)
-    )
-
-    return ranked
-
-
-# ============================================================
-# SAVE MAIN OUTPUTS
-# ============================================================
-
-def save_csv(
-    df,
-    filename
-):
-
-    if (
-        df is None
-        or df.empty
-    ):
 
         return
 
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    path = (
-        OUTPUT_DIR
-        / filename
-    )
+    path = OUTPUT_DIR / filename
 
     df.to_csv(
         path,
@@ -929,111 +152,1009 @@ def save_csv(
 
 
 # ============================================================
-# SAVE WATCHLISTS
+# YAHOO DATA EXTRACTION
 # ============================================================
 
-def save_watchlists(
-    watchlists
+def extract_symbol_data(
+    raw_data,
+    yahoo_symbol
 ):
 
-    if not watchlists:
-        return
+    if raw_data is None or raw_data.empty:
+        return None
 
-    filename_map = {
+    try:
 
-        "next_day":
-            "next_day.csv",
+        data = raw_data.copy()
 
-        "intraday":
-            "intraday.csv",
+        # ----------------------------------------------------
+        # MultiIndex handling
+        # ----------------------------------------------------
 
-        "swing":
-            "swing.csv",
+        if isinstance(
+            data.columns,
+            pd.MultiIndex
+        ):
 
-        "long_term":
-            "long_term.csv",
+            level0 = data.columns.get_level_values(0)
+            level1 = data.columns.get_level_values(1)
 
-        "52w_high":
-            "52w_high.csv",
+            if yahoo_symbol in level0:
 
-        "dma_recovery":
-            "dma_recovery.csv",
+                data = data[
+                    yahoo_symbol
+                ]
 
-        "options":
-            "options.csv",
+            elif yahoo_symbol in level1:
 
-        "momentum":
-            "momentum.csv",
+                data = data.xs(
+                    yahoo_symbol,
+                    axis=1,
+                    level=1
+                )
 
-        "breakout":
-            "breakout.csv"
-    }
+            else:
 
-    for name, df in watchlists.items():
+                # If only one symbol was returned
+                if len(
+                    set(level0)
+                ) == 1:
 
-        filename = filename_map.get(
-            name
-        )
+                    data.columns = level1
 
-        if filename:
+                elif len(
+                    set(level1)
+                ) == 1:
 
-            save_csv(
-                df,
-                filename
+                    data.columns = level0
+
+                else:
+
+                    return None
+
+        # ----------------------------------------------------
+        # Standardize columns
+        # ----------------------------------------------------
+
+        data.columns = [
+            str(column)
+            .strip()
+            for column in data.columns
+        ]
+
+        required = [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+        ]
+
+        if not all(
+            column in data.columns
+            for column in required
+        ):
+
+            return None
+
+        data = data[
+            required
+        ].copy()
+
+        for column in required:
+
+            data[column] = pd.to_numeric(
+                data[column],
+                errors="coerce"
             )
 
+        data = data.dropna(
+            subset=[
+                "Close"
+            ]
+        )
+
+        return data
+
+    except Exception as error:
+
+        print(
+            f"Unable to extract "
+            f"{yahoo_symbol}: {error}"
+        )
+
+        return None
+
 
 # ============================================================
-# JSON SERIALIZATION
+# TECHNICAL SCAN
 # ============================================================
 
-def dataframe_to_records(
-    df
+def scan_technical_data(
+    universe
+):
+
+    if universe is None or universe.empty:
+
+        return pd.DataFrame()
+
+    if "YAHOO_SYMBOL" not in universe.columns:
+
+        if "SYMBOL" not in universe.columns:
+            return pd.DataFrame()
+
+        universe = universe.copy()
+
+        universe["YAHOO_SYMBOL"] = (
+            universe["SYMBOL"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .apply(
+                lambda symbol:
+                    f"{symbol}.NS"
+            )
+        )
+
+    yahoo_symbols = (
+        universe[
+            "YAHOO_SYMBOL"
+        ]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    print()
+    print(
+        "=" * 70
+    )
+
+    print(
+        "TECHNICAL MARKET SCAN"
+    )
+
+    print(
+        f"Universe symbols: {len(yahoo_symbols)}"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    results = []
+
+    total_batches = (
+        math.ceil(
+            len(yahoo_symbols) /
+            BATCH_SIZE
+        )
+    )
+
+    for batch_number, start in enumerate(
+        range(
+            0,
+            len(yahoo_symbols),
+            BATCH_SIZE
+        ),
+        start=1
+    ):
+
+        batch = yahoo_symbols[
+            start:
+            start + BATCH_SIZE
+        ]
+
+        print()
+        print(
+            f"Technical batch "
+            f"{batch_number}/{total_batches}"
+        )
+
+        try:
+
+            raw = yf.download(
+                tickers=batch,
+                period=TECHNICAL_PERIOD,
+                interval="1d",
+                group_by="ticker",
+                auto_adjust=False,
+                progress=False,
+                threads=True
+            )
+
+        except Exception as error:
+
+            print(
+                f"Batch download failed: {error}"
+            )
+
+            continue
+
+        for symbol in batch:
+
+            data = extract_symbol_data(
+                raw,
+                symbol
+            )
+
+            if (
+                data is None or
+                len(data) < 200
+            ):
+                continue
+
+            try:
+
+                technical =
+                    calculate_technical_indicators(
+                        data
+                    )
+
+                if (
+                    technical is None or
+                    technical.empty
+                ):
+                    continue
+
+                latest = technical.iloc[-1]
+
+                if pd.isna(
+                    latest.get("SMA200")
+                ):
+                    continue
+
+                # ------------------------------------------------
+                # Preserve latest row as stock record
+                # ------------------------------------------------
+
+                record = {
+                    "symbol":
+                        symbol.replace(
+                            ".NS",
+                            ""
+                        ),
+                    "yahoo_symbol":
+                        symbol,
+                    "date":
+                        technical.index[-1]
+                }
+
+                for column in technical.columns:
+
+                    record[column] = latest[
+                        column
+                    ]
+
+                results.append(
+                    record
+                )
+
+            except Exception as error:
+
+                print(
+                    f"Technical calculation failed "
+                    f"for {symbol}: {error}"
+                )
+
+        print(
+            f"Stocks analysed so far: "
+            f"{len(results)}"
+        )
+
+    if not results:
+        return pd.DataFrame()
+
+    result = pd.DataFrame(
+        results
+    )
+
+    # --------------------------------------------------------
+    # Clean duplicate symbols
+    # --------------------------------------------------------
+
+    result = result.drop_duplicates(
+        subset=[
+            "symbol"
+        ],
+        keep="last"
+    )
+
+    result = result.reset_index(
+        drop=True
+    )
+
+    # --------------------------------------------------------
+    # Add NSE master information
+    # --------------------------------------------------------
+
+    master = universe.copy()
+
+    if "SYMBOL" in master.columns:
+
+        master["SYMBOL"] = (
+            master["SYMBOL"]
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+
+        master = master.rename(
+            columns={
+                "SYMBOL":
+                    "nse_symbol"
+            }
+        )
+
+        master = master[
+            [
+                column
+                for column in [
+                    "nse_symbol",
+                    "COMPANY_NAME",
+                    "NAME OF COMPANY",
+                    "ISIN NUMBER",
+                    " SERIES",
+                    "SERIES"
+                ]
+                if column in master.columns
+            ]
+        ].drop_duplicates(
+            subset=[
+                "nse_symbol"
+            ]
+        )
+
+        result = result.merge(
+            master,
+            left_on="symbol",
+            right_on="nse_symbol",
+            how="left"
+        )
+
+    print()
+    print(
+        f"Technical scan completed: "
+        f"{len(result)} stocks"
+    )
+
+    return result
+
+
+# ============================================================
+# FUNDAMENTAL SHORTLIST
+# ============================================================
+
+def create_fundamental_shortlist(
+    technical_data
 ):
 
     if (
-        df is None
-        or df.empty
+        technical_data is None or
+        technical_data.empty
     ):
-
         return []
 
-    records = []
+    data = technical_data.copy()
 
-    for record in df.to_dict(
-        orient="records"
-    ):
+    selected = set()
 
-        cleaned = {}
+    # --------------------------------------------------------
+    # Top technical stocks
+    # --------------------------------------------------------
 
-        for key, value in record.items():
+    try:
 
-            cleaned[
-                str(key)
-            ] = clean_value(
-                value
-            )
-
-        records.append(
-            cleaned
+        ranked = data.sort_values(
+            by=[
+                "technical_score"
+            ],
+            ascending=False
         )
 
-    return records
+    except Exception:
+
+        ranked = data
+
+    selected.update(
+        ranked.head(
+            300
+        )[
+            "symbol"
+        ]
+        .dropna()
+        .tolist()
+    )
+
+    # --------------------------------------------------------
+    # Near 52W high
+    # --------------------------------------------------------
+
+    if "Distance_From_52W_High_Pct" in data.columns:
+
+        high_candidates = (
+            data[
+                data[
+                    "Distance_From_52W_High_Pct"
+                ] >= -10
+            ]
+            .sort_values(
+                by=[
+                    "Distance_From_52W_High_Pct"
+                ],
+                ascending=False
+            )
+            .head(150)
+        )
+
+        selected.update(
+            high_candidates[
+                "symbol"
+            ]
+            .dropna()
+            .tolist()
+        )
+
+    # --------------------------------------------------------
+    # Around 200 DMA
+    # --------------------------------------------------------
+
+    if "Distance_From_200DMA_Pct" in data.columns:
+
+        dma_candidates = (
+            data[
+                data[
+                    "Distance_From_200DMA_Pct"
+                ].between(
+                    -7,
+                    7
+                )
+            ]
+            .sort_values(
+                by=[
+                    "technical_score"
+                ],
+                ascending=False
+            )
+            .head(150)
+        )
+
+        selected.update(
+            dma_candidates[
+                "symbol"
+            ]
+            .dropna()
+            .tolist()
+        )
+
+    # --------------------------------------------------------
+    # Positive momentum
+    # --------------------------------------------------------
+
+    if "Momentum" in data.columns:
+
+        momentum_candidates = (
+            data[
+                data[
+                    "Momentum"
+                ].astype(str).str.lower().isin(
+                    [
+                        "positive",
+                        "strong positive"
+                    ]
+                )
+            ]
+            .sort_values(
+                by=[
+                    "technical_score"
+                ],
+                ascending=False
+            )
+            .head(150)
+        )
+
+        selected.update(
+            momentum_candidates[
+                "symbol"
+            ]
+            .dropna()
+            .tolist()
+        )
+
+    # --------------------------------------------------------
+    # Limit fundamental API load
+    # --------------------------------------------------------
+
+    selected = list(
+        dict.fromkeys(
+            [
+                str(symbol)
+                .upper()
+                .replace(
+                    ".NS",
+                    ""
+                )
+                for symbol in selected
+            ]
+        )
+    )
+
+    selected = selected[
+        :500
+    ]
+
+    print()
+    print(
+        f"Fundamental shortlist: "
+        f"{len(selected)} stocks"
+    )
+
+    return selected
 
 
 # ============================================================
-# CREATE DASHBOARD JSON
+# MERGE FUNDAMENTALS
+# ============================================================
+
+def merge_fundamental_data(
+    ranked_data,
+    fundamentals
+):
+
+    if (
+        ranked_data is None or
+        ranked_data.empty
+    ):
+        return ranked_data
+
+    if (
+        fundamentals is None or
+        fundamentals.empty
+    ):
+        ranked_data = ranked_data.copy()
+
+        ranked_data[
+            "fundamental_data_available"
+        ] = False
+
+        ranked_data[
+            "fundamental_status"
+        ] = "Unavailable"
+
+        return ranked_data
+
+    stocks = ranked_data.copy()
+    fund = fundamentals.copy()
+
+    if "symbol" not in fund.columns:
+
+        return stocks
+
+    stocks["symbol"] = (
+        stocks["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.replace(
+            ".NS",
+            "",
+            regex=False
+        )
+    )
+
+    fund["symbol"] = (
+        fund["symbol"]
+        .astype(str)
+        .str.upper()
+        .str.replace(
+            ".NS",
+            "",
+            regex=False
+        )
+    )
+
+    # --------------------------------------------------------
+    # Remove conflicting columns from previous ranking
+    # --------------------------------------------------------
+
+    duplicate_columns = [
+        column
+        for column in fund.columns
+        if (
+            column != "symbol" and
+            column in stocks.columns
+        )
+    ]
+
+    # These fundamental columns should replace
+    # temporary/empty ranking values.
+    for column in duplicate_columns:
+
+        stocks = stocks.drop(
+            columns=[
+                column
+            ]
+        )
+
+    stocks = stocks.merge(
+        fund,
+        on="symbol",
+        how="left"
+    )
+
+    # --------------------------------------------------------
+    # Fundamental availability
+    # --------------------------------------------------------
+
+    if "fundamental_data_available" not in stocks.columns:
+
+        stocks[
+            "fundamental_data_available"
+        ] = (
+            ~stocks[
+                "fundamental_score"
+            ].isna()
+        )
+
+    stocks[
+        "fundamental_status"
+    ] = (
+        stocks[
+            "fundamental_data_available"
+        ]
+        .apply(
+            lambda value:
+                "Available"
+                if bool(value)
+                else "Unavailable"
+        )
+    )
+
+    return stocks
+
+
+# ============================================================
+# FINAL RANKING
+# ============================================================
+
+def create_final_ranking(
+    technical_data,
+    fundamentals,
+    sector_data,
+    market_regime
+):
+
+    print()
+    print(
+        "=" * 70
+    )
+
+    print(
+        "FINAL STOCK RANKING"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    # --------------------------------------------------------
+    # First ranking with technical data
+    # --------------------------------------------------------
+
+    ranked = rank_stocks(
+        technical_data,
+        fundamental_data=fundamentals,
+        sector_data=sector_data,
+        market_regime=market_regime
+    )
+
+    if ranked.empty:
+        return ranked
+
+    # --------------------------------------------------------
+    # Ensure fundamentals are fully merged
+    # --------------------------------------------------------
+
+    ranked = merge_fundamental_data(
+        ranked,
+        fundamentals
+    )
+
+    # --------------------------------------------------------
+    # Recalculate final scores after all data exists
+    # --------------------------------------------------------
+
+    ranked = rank_stocks(
+        ranked,
+        fundamental_data=None,
+        sector_data=sector_data,
+        market_regime=market_regime
+    )
+
+    # --------------------------------------------------------
+    # Make sure fundamental score survives if available
+    # --------------------------------------------------------
+
+    if (
+        fundamentals is not None and
+        not fundamentals.empty
+    ):
+
+        fund_columns = [
+            column
+            for column in fundamentals.columns
+            if column != "symbol"
+        ]
+
+        existing_fundamental_data = (
+            fundamentals[
+                [
+                    "symbol"
+                ] +
+                [
+                    column
+                    for column in fund_columns
+                    if column not in ranked.columns
+                ]
+            ]
+            if "symbol" in fundamentals.columns
+            else pd.DataFrame()
+        )
+
+        if (
+            not existing_fundamental_data.empty
+        ):
+
+            ranked = ranked.merge(
+                existing_fundamental_data,
+                on="symbol",
+                how="left"
+            )
+
+    # --------------------------------------------------------
+    # If ranking recalculation removed/overwrote
+    # fundamental score, calculate it again.
+    # --------------------------------------------------------
+
+    if (
+        "fundamental_score" not in ranked.columns
+    ):
+
+        ranked["fundamental_score"] = np.nan
+
+    # --------------------------------------------------------
+    # Final score directly from existing scores
+    # --------------------------------------------------------
+
+    technical_score = pd.to_numeric(
+        ranked[
+            "technical_score"
+        ],
+        errors="coerce"
+    ).fillna(0)
+
+    fundamental_score = pd.to_numeric(
+        ranked[
+            "fundamental_score"
+        ],
+        errors="coerce"
+    )
+
+    sector_adjustment = pd.to_numeric(
+        ranked.get(
+            "sector_adjustment",
+            0
+        ),
+        errors="coerce"
+    ).fillna(0)
+
+    market_adjustment = pd.to_numeric(
+        ranked.get(
+            "market_regime_adjustment",
+            0
+        ),
+        errors="coerce"
+    ).fillna(0)
+
+    final_score = np.where(
+        fundamental_score.notna(),
+        (
+            technical_score * 0.60 +
+            fundamental_score.fillna(0) * 0.40
+        ),
+        technical_score
+    )
+
+    final_score = (
+        pd.Series(
+            final_score,
+            index=ranked.index
+        )
+        +
+        sector_adjustment
+        +
+        market_adjustment
+    )
+
+    ranked[
+        "overall_score"
+    ] = (
+        final_score
+        .clip(
+            lower=0,
+            upper=100
+        )
+        .round(2)
+    )
+
+    # --------------------------------------------------------
+    # Final ranking
+    # --------------------------------------------------------
+
+    ranked = ranked.sort_values(
+        by=[
+            "overall_score",
+            "technical_score"
+        ],
+        ascending=False
+    ).reset_index(
+        drop=True
+    )
+
+    ranked[
+        "rank"
+    ] = np.arange(
+        1,
+        len(ranked) + 1
+    )
+
+    # --------------------------------------------------------
+    # Final rating
+    # --------------------------------------------------------
+
+    def rating(score):
+
+        score = safe_float(
+            score
+        )
+
+        if pd.isna(score):
+            return "Unrated"
+
+        if score >= 80:
+            return "Excellent Setup"
+
+        if score >= 70:
+            return "Strong Setup"
+
+        if score >= 60:
+            return "Good Setup"
+
+        if score >= 50:
+            return "Watch"
+
+        if score >= 40:
+            return "Confirmation Required"
+
+        return "Weak / Avoid"
+
+    ranked[
+        "rating"
+    ] = (
+        ranked[
+            "overall_score"
+        ]
+        .apply(rating)
+    )
+
+    return ranked
+
+
+# ============================================================
+# EXCEL EXPORT
+# ============================================================
+
+def export_excel(
+    ranked_data,
+    watchlists
+):
+
+    print()
+    print(
+        "=" * 70
+    )
+
+    print(
+        "EXCEL EXPORT"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    # --------------------------------------------------------
+    # All stocks
+    # --------------------------------------------------------
+
+    if (
+        ranked_data is not None and
+        not ranked_data.empty
+    ):
+
+        try:
+
+            path = (
+                EXPORT_DIR /
+                "all_stocks.xlsx"
+            )
+
+            ranked_data.to_excel(
+                path,
+                index=False
+            )
+
+            print(
+                f"Saved: {path}"
+            )
+
+        except Exception as error:
+
+            print(
+                f"Unable to export all stocks: "
+                f"{error}"
+            )
+
+    # --------------------------------------------------------
+    # Watchlists
+    # --------------------------------------------------------
+
+    for name, data in (
+        watchlists or {}
+    ).items():
+
+        if (
+            data is None or
+            data.empty
+        ):
+            continue
+
+        path = (
+            EXPORT_DIR /
+            f"{name}.xlsx"
+        )
+
+        try:
+
+            data.to_excel(
+                path,
+                index=False
+            )
+
+            print(
+                f"Saved: {path}"
+            )
+
+        except Exception as error:
+
+            print(
+                f"Unable to export "
+                f"{name}: {error}"
+            )
+
+
+# ============================================================
+# DASHBOARD JSON
 # ============================================================
 
 def create_dashboard_json(
     market,
     breadth,
     sectors,
-    ranked,
+    ranked_data,
     watchlists
 ):
 
-    data = {
+    dashboard = {
 
         "generated_at":
             pd.Timestamp.now(
@@ -1047,496 +1168,428 @@ def create_dashboard_json(
             breadth or {},
 
         "sectors":
-            dataframe_to_records(
+            clean_dataframe_for_json(
                 sectors
             ),
 
         "stocks":
-            dataframe_to_records(
-                ranked
+            clean_dataframe_for_json(
+                ranked_data
             ),
 
-        "watchlists": {}
+        "watchlists": {
+            name:
+                clean_dataframe_for_json(
+                    data
+                )
+            for name, data
+            in (
+                watchlists or {}
+            ).items()
+        }
+
     }
 
-    for name, df in (
-        watchlists or {}
-    ).items():
-
-        data[
-            "watchlists"
-        ][name] = dataframe_to_records(
-            df
-        )
-
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
+    path = (
+        OUTPUT_DIR /
+        "dashboard_data.json"
     )
 
     with open(
-        JSON_FILE,
+        path,
         "w",
         encoding="utf-8"
     ) as file:
 
         json.dump(
-            data,
+            dashboard,
             file,
-            indent=2,
             ensure_ascii=False,
-            allow_nan=False
+            indent=2
         )
 
+    print()
     print(
-        f"Saved dashboard data: "
-        f"{JSON_FILE}"
+        f"Saved dashboard JSON: {path}"
     )
 
 
 # ============================================================
-# EXCEL EXPORT
-# ============================================================
-
-def create_excel_exports(
-    ranked,
-    watchlists
-):
-
-    if (
-        ranked is None
-        or ranked.empty
-    ):
-
-        return
-
-    export_dir = (
-        OUTPUT_DIR
-        / "exports"
-    )
-
-    export_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    # --------------------------------------------------------
-    # Complete stock analysis
-    # --------------------------------------------------------
-
-    try:
-
-        ranked.to_excel(
-            export_dir
-            / "all_stocks.xlsx",
-            index=False
-        )
-
-        print(
-            "Created "
-            "all_stocks.xlsx"
-        )
-
-    except Exception as e:
-
-        print(
-            f"Excel export error: {e}"
-        )
-
-    # --------------------------------------------------------
-    # Individual watchlists
-    # --------------------------------------------------------
-
-    for name, df in (
-        watchlists or {}
-    ).items():
-
-        if (
-            df is None
-            or df.empty
-        ):
-
-            continue
-
-        try:
-
-            df.to_excel(
-                export_dir
-                / f"{name}.xlsx",
-                index=False
-            )
-
-        except Exception as e:
-
-            print(
-                f"Excel export error "
-                f"{name}: {e}"
-            )
-
-
-# ============================================================
-# MAIN PRODUCTION PIPELINE
+# MAIN
 # ============================================================
 
 def main():
 
     print()
-    print("=" * 70)
-    print("NSE SMART MARKET DASHBOARD")
-    print("PRODUCTION SCANNER")
-    print("=" * 70)
-
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
+    print(
+        "=" * 70
     )
 
+    print(
+        "NSE SMART MARKET DASHBOARD V2"
+    )
+
+    print(
+        "MASTER PRODUCTION SCANNER"
+    )
+
+    print(
+        "Created by Rakesh Nagapuri"
+    )
+
+    print(
+        "=" * 70
+    )
 
     # ========================================================
-    # STEP 1 — NSE UNIVERSE
+    # 1. NSE UNIVERSE
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 1 — NSE EQUITY UNIVERSE")
-    print("=" * 60)
+    print(
+        "STEP 1 — NSE EQUITY UNIVERSE"
+    )
 
     universe = get_nse_universe()
 
     if universe.empty:
 
-        print(
-            "NSE universe unavailable."
+        raise RuntimeError(
+            "NSE equity universe could not be loaded."
         )
-
-        return
 
     save_universe(
         universe
     )
 
-    print(
-        f"Universe size: "
-        f"{len(universe)}"
-    )
-
-
     # ========================================================
-    # STEP 2 — MARKET BREADTH
+    # 2. MARKET BREADTH
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 2 — MARKET BREADTH")
-    print("=" * 60)
+    print(
+        "STEP 2 — MARKET BREADTH"
+    )
 
     breadth = get_market_breadth(
         universe
     )
 
-    display_breadth(
-        breadth
-    )
-
+    if breadth is None:
+        breadth = {}
 
     # ========================================================
-    # STEP 3 — MARKET REGIME
+    # 3. MARKET REGIME
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 3 — MARKET REGIME")
-    print("=" * 60)
+    print(
+        "STEP 3 — MARKET REGIME"
+    )
 
     market = get_market_regime(
-        breadth
+        breadth=breadth
     )
 
-    display_market(
-        market
-    )
-
-    save_csv(
-        pd.DataFrame(
-            [market]
-        ),
-        "market_regime.csv"
-    )
-
+    if market is None:
+        market = {}
 
     # ========================================================
-    # STEP 4 — SECTOR ANALYSIS
+    # 4. SECTOR ANALYSIS
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 4 — SECTOR ANALYSIS")
-    print("=" * 60)
+    print(
+        "STEP 4 — SECTOR ANALYSIS"
+    )
 
-    sectors = get_sector_analysis()
+    sector_data = get_sector_analysis()
 
-    if sectors.empty:
-
-        print(
-            "Sector analysis unavailable."
-        )
-
-    else:
-
-        print(
-            f"Sectors analyzed: "
-            f"{len(sectors)}"
-        )
-
+    if sector_data is None:
+        sector_data = pd.DataFrame()
 
     # ========================================================
-    # STEP 5 — FULL TECHNICAL SCAN
+    # 5. TECHNICAL SCAN
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 5 — FULL NSE TECHNICAL SCAN")
-    print("=" * 60)
+    print(
+        "STEP 5 — FULL TECHNICAL SCAN"
+    )
 
-    technical = run_technical_scan(
+    technical_data = scan_technical_data(
         universe
     )
 
-    if technical.empty:
+    if technical_data.empty:
 
-        print(
-            "Technical scan failed."
+        raise RuntimeError(
+            "Technical scan returned no stocks."
         )
 
-        return
-
-    technical = enrich_with_universe(
-        technical,
-        universe
-    )
-
     save_csv(
-        technical,
+        technical_data,
         "technical_scan.csv"
     )
 
-
     # ========================================================
-    # STEP 6 — INITIAL RANKING
+    # 6. INITIAL TECHNICAL RANKING
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 6 — INITIAL TECHNICAL RANKING")
-    print("=" * 60)
-
-    initial_ranked = rank_stocks(
-        technical,
-        sector_data=sectors
+    print(
+        "STEP 6 — INITIAL TECHNICAL RANKING"
     )
 
-    if initial_ranked.empty:
-
-        print(
-            "Ranking failed."
-        )
-
-        return
-
+    initial_ranking = rank_stocks(
+        technical_data,
+        fundamental_data=None,
+        sector_data=sector_data,
+        market_regime=market
+    )
 
     # ========================================================
-    # STEP 7 — FUNDAMENTAL SHORTLIST
+    # 7. FUNDAMENTAL SHORTLIST
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 7 — FUNDAMENTAL SHORTLIST")
-    print("=" * 60)
+    print(
+        "STEP 7 — FUNDAMENTAL SHORTLIST"
+    )
 
     fundamental_symbols = (
         create_fundamental_shortlist(
-            initial_ranked
+            initial_ranking
         )
     )
 
-    print(
-        f"Fundamental candidates: "
-        f"{len(fundamental_symbols)}"
-    )
-
-
     # ========================================================
-    # STEP 8 — FUNDAMENTAL ANALYSIS
-    # ========================================================
-
-    fundamentals = pd.DataFrame()
-
-    if fundamental_symbols:
-
-        fundamentals = get_fundamentals(
-            universe,
-            symbols=fundamental_symbols
-        )
-
-    save_csv(
-        fundamentals,
-        "fundamentals.csv"
-    )
-
-
-    # ========================================================
-    # STEP 9 — FINAL RANKING
+    # 8. FUNDAMENTAL ANALYSIS
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 9 — FINAL RANKING")
-    print("=" * 60)
+    print(
+        "STEP 8 — FUNDAMENTAL ANALYSIS"
+    )
 
-    ranked = finalize_ranking(
-        technical,
-        sectors,
-        fundamentals
+    fundamentals = get_fundamentals(
+        universe,
+        symbols=fundamental_symbols,
+        use_cache=True
+    )
+
+    if (
+        fundamentals is not None and
+        not fundamentals.empty
+    ):
+
+        save_csv(
+            fundamentals,
+            "fundamentals.csv"
+        )
+
+    # ========================================================
+    # 9. FINAL RANKING
+    # ========================================================
+
+    print()
+    print(
+        "STEP 9 — FINAL RANKING"
+    )
+
+    ranked = create_final_ranking(
+        technical_data,
+        fundamentals,
+        sector_data,
+        market
     )
 
     if ranked.empty:
 
-        print(
-            "Final ranking unavailable."
+        raise RuntimeError(
+            "Final ranking returned no stocks."
         )
 
-        return
-
-
-    # Main stock file
     save_csv(
         ranked,
         "stocks.csv"
     )
 
+    # ========================================================
+    # 10. WATCHLISTS
+    # ========================================================
+
+    print()
+    print(
+        "STEP 10 — SMART WATCHLISTS"
+    )
+
+    watchlists = create_watchlists(
+        ranked,
+        market_regime=market
+    )
 
     # ========================================================
-    # STEP 10 — SETUP SUMMARY
+    # 11. WATCHLIST CSV FILES
     # ========================================================
 
-    summary = create_setup_summary(
-        ranked
+    for name, data in (
+        watchlists.items()
+    ):
+
+        save_csv(
+            data,
+            f"{name}.csv"
+        )
+
+    # ========================================================
+    # 12. SETUP SUMMARY
+    # ========================================================
+
+    print()
+    print(
+        "STEP 11 — SETUP SUMMARY"
+    )
+
+    setup_summary = (
+        create_setup_summary(
+            ranked
+        )
     )
 
     save_csv(
-        summary,
+        setup_summary,
         "setup_summary.csv"
     )
 
-
     # ========================================================
-    # STEP 11 — WATCHLISTS
-    # ========================================================
-
-    print()
-    print("=" * 60)
-    print("STEP 11 — WATCHLISTS")
-    print("=" * 60)
-
-    watchlists = create_watchlists(
-        ranked
-    )
-
-    save_watchlists(
-        watchlists
-    )
-
-
-    # ========================================================
-    # STEP 12 — EXCEL EXPORTS
+    # 13. MARKET FILES
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 12 — EXCEL EXPORTS")
-    print("=" * 60)
+    print(
+        "STEP 12 — MARKET OUTPUT FILES"
+    )
 
-    create_excel_exports(
+    if market:
+
+        market_df = pd.DataFrame(
+            [
+                market
+            ]
+        )
+
+        save_csv(
+            market_df,
+            "market_regime.csv"
+        )
+
+    # ========================================================
+    # 14. EXCEL EXPORT
+    # ========================================================
+
+    print()
+    print(
+        "STEP 13 — EXCEL EXPORT"
+    )
+
+    export_excel(
         ranked,
         watchlists
     )
 
-
     # ========================================================
-    # STEP 13 — DASHBOARD JSON
+    # 15. DASHBOARD JSON
     # ========================================================
 
     print()
-    print("=" * 60)
-    print("STEP 13 — DASHBOARD DATA")
-    print("=" * 60)
+    print(
+        "STEP 14 — DASHBOARD JSON"
+    )
 
     create_dashboard_json(
         market,
         breadth,
-        sectors,
+        sector_data,
         ranked,
         watchlists
     )
 
-
     # ========================================================
-    # FINAL SUMMARY
+    # 16. SUMMARY
     # ========================================================
-
-    print()
-    print("=" * 70)
-    print("PRODUCTION SCAN COMPLETED")
-    print("=" * 70)
 
     print()
     print(
-        f"NSE universe       : "
+        "=" * 70
+    )
+
+    print(
+        "PRODUCTION SCAN COMPLETED"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    print()
+
+    print(
+        f"NSE Universe: "
         f"{len(universe)}"
     )
 
     print(
-        f"Technical stocks   : "
-        f"{len(technical)}"
+        f"Technical Stocks: "
+        f"{len(technical_data)}"
     )
 
     print(
-        f"Fundamental stocks : "
-        f"{len(fundamentals)}"
+        f"Fundamental Stocks: "
+        f"{len(fundamentals) if fundamentals is not None else 0}"
     )
 
     print(
-        f"Final ranked       : "
+        f"Final Ranked Stocks: "
         f"{len(ranked)}"
     )
 
     print()
 
     print(
-        "Watchlists created:"
+        "Watchlists:"
     )
 
-    for name, df in (
-        watchlists or {}
-    ).items():
+    for name, data in (
+        watchlists.items()
+    ):
 
         print(
-            f"  {name:<15} "
-            f"{len(df)}"
+            f"  {name}: "
+            f"{len(data)}"
         )
 
     print()
+
     print(
-        f"Dashboard file:"
+        f"Dashboard JSON: "
+        f"{OUTPUT_DIR / 'dashboard_data.json'}"
     )
 
     print(
-        f"  {JSON_FILE}"
+        f"Excel exports: "
+        f"{EXPORT_DIR}"
     )
 
     print()
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
 
