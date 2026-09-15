@@ -12,10 +12,14 @@ from engines.ranking_engine import (
     create_setup_summary
 )
 
+from engines.market_engine import (
+    get_market_regime
+)
+
 
 # ============================================================
 # NSE SMART MARKET DASHBOARD
-# BATCH STOCK SCANNER + RANKING
+# MARKET + STOCK RANKING ENGINE
 # ============================================================
 
 
@@ -23,12 +27,16 @@ BASE_DIR = Path(__file__).resolve().parent
 
 OUTPUT_DIR = BASE_DIR / "output"
 
-OUTPUT_FILE = (
+RANKED_FILE = (
     OUTPUT_DIR / "technical_ranked_test.csv"
 )
 
 SUMMARY_FILE = (
     OUTPUT_DIR / "setup_summary_test.csv"
+)
+
+MARKET_FILE = (
+    OUTPUT_DIR / "market_regime_test.csv"
 )
 
 
@@ -45,13 +53,199 @@ TEST_STOCKS = [
 ]
 
 
+# ============================================================
+# MARKET ANALYSIS
+# ============================================================
+
+def analyze_market():
+
+    print()
+    print("=" * 60)
+    print("RUNNING MARKET ENGINE")
+    print("=" * 60)
+
+    market = get_market_regime()
+
+    if not market:
+
+        print(
+            "Market Engine returned no data."
+        )
+
+        return {}
+
+    overall = market.get(
+        "MARKET",
+        {}
+    )
+
+    print()
+    print(
+        f"Overall Market Regime : "
+        f"{overall.get('regime', 'Unknown')}"
+    )
+
+    print(
+        f"Overall Market Score   : "
+        f"{overall.get('market_score', 0):.2f}"
+    )
+
+    # --------------------------------------------------------
+    # NIFTY
+    # --------------------------------------------------------
+
+    nifty = market.get(
+        "NIFTY 50",
+        {}
+    )
+
+    if nifty:
+
+        print()
+        print("NIFTY 50")
+
+        print(
+            f"Price       : "
+            f"{nifty.get('price', 0):.2f}"
+        )
+
+        print(
+            f"Trend       : "
+            f"{nifty.get('trend', 'Unknown')}"
+        )
+
+        print(
+            f"Momentum    : "
+            f"{nifty.get('momentum', 'Unknown')}"
+        )
+
+        print(
+            f"RSI         : "
+            f"{nifty.get('rsi14', 0):.2f}"
+        )
+
+        print(
+            f"Score       : "
+            f"{nifty.get('market_score', 0):.2f}"
+        )
+
+    # --------------------------------------------------------
+    # BANK NIFTY
+    # --------------------------------------------------------
+
+    banknifty = market.get(
+        "BANK NIFTY",
+        {}
+    )
+
+    if banknifty:
+
+        print()
+        print("BANK NIFTY")
+
+        print(
+            f"Price       : "
+            f"{banknifty.get('price', 0):.2f}"
+        )
+
+        print(
+            f"Trend       : "
+            f"{banknifty.get('trend', 'Unknown')}"
+        )
+
+        print(
+            f"Momentum    : "
+            f"{banknifty.get('momentum', 'Unknown')}"
+        )
+
+        print(
+            f"RSI         : "
+            f"{banknifty.get('rsi14', 0):.2f}"
+        )
+
+        print(
+            f"Score       : "
+            f"{banknifty.get('market_score', 0):.2f}"
+        )
+
+    # --------------------------------------------------------
+    # INDIA VIX
+    # --------------------------------------------------------
+
+    vix = market.get(
+        "INDIA VIX",
+        {}
+    )
+
+    if vix:
+
+        print()
+        print(
+            f"INDIA VIX   : "
+            f"{vix.get('value', 0):.2f}"
+        )
+
+    return market
+
+
+# ============================================================
+# SAVE MARKET DATA
+# ============================================================
+
+def save_market_data(market):
+
+    if not market:
+
+        return
+
+    rows = []
+
+    for name, values in market.items():
+
+        row = {
+            "market_component": name
+        }
+
+        row.update(values)
+
+        rows.append(row)
+
+    if not rows:
+
+        return
+
+    df = pd.DataFrame(
+        rows
+    )
+
+    OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    df.to_csv(
+        MARKET_FILE,
+        index=False
+    )
+
+    print()
+    print(
+        f"Saved market data:"
+    )
+
+    print(
+        MARKET_FILE
+    )
+
+
+# ============================================================
+# DOWNLOAD STOCK DATA
+# ============================================================
+
 def download_stock_data(
     symbol,
     period="2y"
 ):
-    """
-    Download historical OHLCV data.
-    """
 
     print(
         f"Downloading: {symbol}"
@@ -127,11 +321,11 @@ def download_stock_data(
         return pd.DataFrame()
 
 
+# ============================================================
+# ANALYZE ONE STOCK
+# ============================================================
+
 def analyze_stock(symbol):
-    """
-    Download and technically analyze
-    one stock.
-    """
 
     data = download_stock_data(
         symbol
@@ -164,10 +358,11 @@ def analyze_stock(symbol):
     return analysis
 
 
+# ============================================================
+# SCAN STOCKS
+# ============================================================
+
 def scan_stocks(symbols):
-    """
-    Scan multiple stocks.
-    """
 
     results = []
 
@@ -177,7 +372,7 @@ def scan_stocks(symbols):
     print("=" * 60)
 
     print(
-        f"Starting batch scan: "
+        f"Starting stock scan: "
         f"{total} stocks"
     )
 
@@ -189,7 +384,6 @@ def scan_stocks(symbols):
     ):
 
         print()
-
         print(
             f"[{number}/{total}] "
             f"{symbol}"
@@ -220,11 +414,11 @@ def scan_stocks(symbols):
     return results
 
 
+# ============================================================
+# CREATE DATAFRAME
+# ============================================================
+
 def create_dataframe(results):
-    """
-    Convert analysis results
-    into dataframe.
-    """
 
     if not results:
 
@@ -251,10 +445,11 @@ def create_dataframe(results):
     return df
 
 
-def save_results(df):
-    """
-    Save ranked technical results.
-    """
+# ============================================================
+# SAVE RANKED RESULTS
+# ============================================================
+
+def save_ranked_results(df):
 
     OUTPUT_DIR.mkdir(
         parents=True,
@@ -262,25 +457,25 @@ def save_results(df):
     )
 
     df.to_csv(
-        OUTPUT_FILE,
+        RANKED_FILE,
         index=False
     )
 
     print()
-
     print(
-        f"Saved ranked results:"
+        "Saved ranked results:"
     )
 
     print(
-        OUTPUT_FILE
+        RANKED_FILE
     )
 
 
-def save_summary(summary):
-    """
-    Save setup summary.
-    """
+# ============================================================
+# SAVE SETUP SUMMARY
+# ============================================================
+
+def save_setup_summary(summary):
 
     if summary.empty:
 
@@ -292,7 +487,6 @@ def save_summary(summary):
     )
 
     print()
-
     print(
         "Saved setup summary:"
     )
@@ -302,10 +496,44 @@ def save_summary(summary):
     )
 
 
+# ============================================================
+# DISPLAY MARKET
+# ============================================================
+
+def display_market(market):
+
+    if not market:
+
+        return
+
+    overall = market.get(
+        "MARKET",
+        {}
+    )
+
+    print()
+    print("=" * 60)
+    print("MARKET REGIME")
+    print("=" * 60)
+
+    print()
+
+    print(
+        f"Regime : "
+        f"{overall.get('regime', 'Unknown')}"
+    )
+
+    print(
+        f"Score  : "
+        f"{overall.get('market_score', 0):.2f}"
+    )
+
+
+# ============================================================
+# DISPLAY RANKINGS
+# ============================================================
+
 def display_rankings(df):
-    """
-    Display ranked stocks.
-    """
 
     if df.empty:
 
@@ -355,10 +583,11 @@ def display_rankings(df):
     print("=" * 60)
 
 
+# ============================================================
+# DISPLAY SETUP SUMMARY
+# ============================================================
+
 def display_setup_summary(summary):
-    """
-    Display setup counts.
-    """
 
     if summary.empty:
 
@@ -385,6 +614,10 @@ def display_setup_summary(summary):
     print("=" * 60)
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 def main():
 
     print()
@@ -395,13 +628,27 @@ def main():
     )
 
     print(
-        "RANKED STOCK SCANNER"
+        "MARKET + STOCK RANKING TEST"
     )
 
     print("=" * 60)
 
     # --------------------------------------------------------
-    # Scan stocks
+    # STEP 1 — MARKET
+    # --------------------------------------------------------
+
+    market = analyze_market()
+
+    save_market_data(
+        market
+    )
+
+    display_market(
+        market
+    )
+
+    # --------------------------------------------------------
+    # STEP 2 — STOCKS
     # --------------------------------------------------------
 
     results = scan_stocks(
@@ -418,7 +665,7 @@ def main():
         return
 
     # --------------------------------------------------------
-    # Create dataframe
+    # STEP 3 — DATAFRAME
     # --------------------------------------------------------
 
     df = create_dataframe(
@@ -426,7 +673,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Apply ranking engine
+    # STEP 4 — RANKING
     # --------------------------------------------------------
 
     print()
@@ -443,7 +690,7 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Setup summary
+    # STEP 5 — SETUP SUMMARY
     # --------------------------------------------------------
 
     summary = create_setup_summary(
@@ -451,42 +698,38 @@ def main():
     )
 
     # --------------------------------------------------------
-    # Save results
+    # STEP 6 — SAVE
     # --------------------------------------------------------
 
-    save_results(
+    save_ranked_results(
         ranked_df
     )
 
-    save_summary(
+    save_setup_summary(
         summary
     )
 
     # --------------------------------------------------------
-    # Display rankings
+    # STEP 7 — DISPLAY
     # --------------------------------------------------------
 
     display_rankings(
         ranked_df
     )
 
-    # --------------------------------------------------------
-    # Display setup summary
-    # --------------------------------------------------------
-
     display_setup_summary(
         summary
     )
 
     # --------------------------------------------------------
-    # Complete
+    # COMPLETE
     # --------------------------------------------------------
 
     print()
     print("=" * 60)
 
     print(
-        "RANKED SCANNER TEST COMPLETE"
+        "MARKET + STOCK RANKING TEST COMPLETE"
     )
 
     print("=" * 60)
