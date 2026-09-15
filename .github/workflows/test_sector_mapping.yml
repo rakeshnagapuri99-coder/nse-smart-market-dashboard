@@ -1,0 +1,45 @@
+name: Test Sector Mapping
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Sector Mapping
+        run: |
+          python engines/sector_mapping.py
+
+      - name: Verify Sector Mapping
+        run: |
+          echo "======================================"
+          echo "SECTOR MAPPING OUTPUT"
+          echo "======================================"
+
+          if [ -f data/sector_mapping.csv ]; then
+            echo "✓ Sector mapping file created"
+            echo ""
+            echo "Total mappings:"
+            wc -l data/sector_mapping.csv
+            echo ""
+            echo "First 20 rows:"
+            head -20 data/sector_mapping.csv
+          else
+            echo "✗ Sector mapping file was not created"
+            exit 1
+          fi
