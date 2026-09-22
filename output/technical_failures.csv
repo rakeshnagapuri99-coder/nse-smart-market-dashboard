@@ -13,6 +13,7 @@ ADVIKCA.NS,insufficient or invalid OHLCV
 AEPL.NS,insufficient or invalid OHLCV
 AEQUS.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
+AETHER.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
 ALFREDHE.NS,insufficient or invalid OHLCV
@@ -66,6 +67,7 @@ BTTL.NS,insufficient or invalid OHLCV
 BUILDPRO.NS,insufficient or invalid OHLCV
 CAPILLARY.NS,insufficient or invalid OHLCV
 CEINSYS.NS,insufficient or invalid OHLCV
+CENTEXT-RE.NS,insufficient or invalid OHLCV
 CFEL.NS,insufficient or invalid OHLCV
 CGVAK.NS,insufficient or invalid OHLCV
 CHEMCRUX.NS,insufficient or invalid OHLCV
@@ -133,6 +135,7 @@ HAWKINCOOK.NS,insufficient or invalid OHLCV
 HAZOOR.NS,insufficient or invalid OHLCV
 HBESD.NS,insufficient or invalid OHLCV
 HBPOR.NS,insufficient or invalid OHLCV
+HEGAM.NS,insufficient or invalid OHLCV
 HEXAGON.NS,insufficient or invalid OHLCV
 HINDADH.NS,insufficient or invalid OHLCV
 HINDALUMI.NS,insufficient or invalid OHLCV
@@ -187,7 +190,6 @@ LCCPROJECT.NS,insufficient or invalid OHLCV
 LCL.NS,insufficient or invalid OHLCV
 LEAPIND.NS,insufficient or invalid OHLCV
 LEENEE.NS,insufficient or invalid OHLCV
-LENSKART.NS,insufficient or invalid OHLCV
 LKPSEC.NS,insufficient or invalid OHLCV
 LOTUSCHO.NS,insufficient or invalid OHLCV
 LUMINO.NS,insufficient or invalid OHLCV
@@ -314,7 +316,6 @@ SINGERIND.NS,insufficient or invalid OHLCV
 SKFINDUS.NS,insufficient or invalid OHLCV
 SKYWAYS.NS,insufficient or invalid OHLCV
 SONAL.NS,insufficient or invalid OHLCV
-SPELS.NS,insufficient or invalid OHLCV
 SRIKPRIND.NS,insufficient or invalid OHLCV
 SRTL.NS,insufficient or invalid OHLCV
 STEAMHOUSE.NS,insufficient or invalid OHLCV
