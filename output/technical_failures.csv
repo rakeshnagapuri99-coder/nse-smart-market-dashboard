@@ -4,6 +4,7 @@ AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
 ABMKNO.NS,insufficient or invalid OHLCV
+ACEVECTOR.NS,insufficient or invalid OHLCV
 ACGL.NS,insufficient or invalid OHLCV
 ACSTECH.NS,insufficient or invalid OHLCV
 ADDIND.NS,insufficient or invalid OHLCV
@@ -13,7 +14,6 @@ ADVIKCA.NS,insufficient or invalid OHLCV
 AEPL.NS,insufficient or invalid OHLCV
 AEQUS.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
-AGASTYAEN.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
 ALFREDHE.NS,insufficient or invalid OHLCV
@@ -118,6 +118,7 @@ FREDUN.NS,insufficient or invalid OHLCV
 FRONTSP.NS,insufficient or invalid OHLCV
 GAJA.NS,insufficient or invalid OHLCV
 GAUDIUMIVF.NS,insufficient or invalid OHLCV
+GERMAN.NS,insufficient or invalid OHLCV
 GKB.NS,insufficient or invalid OHLCV
 GKSL.NS,insufficient or invalid OHLCV
 GLASSWALL.NS,insufficient or invalid OHLCV
@@ -243,6 +244,7 @@ OMPOWER.NS,insufficient or invalid OHLCV
 ONEGLOBAL.NS,insufficient or invalid OHLCV
 ONIXSOLAR.NS,insufficient or invalid OHLCV
 OPTIFIN.NS,insufficient or invalid OHLCV
+ORIENTCABL.NS,insufficient or invalid OHLCV
 ORIRAIL.NS,insufficient or invalid OHLCV
 PACIFICI.NS,insufficient or invalid OHLCV
 PANCHMAHQ.NS,insufficient or invalid OHLCV
@@ -279,6 +281,7 @@ RSDFIN.NS,insufficient or invalid OHLCV
 RSL.NS,insufficient or invalid OHLCV
 RTSPOWR.NS,insufficient or invalid OHLCV
 RUDRA.NS,insufficient or invalid OHLCV
+RUNWALENTR.NS,insufficient or invalid OHLCV
 SAB.NS,insufficient or invalid OHLCV
 SAHLIBHFI.NS,insufficient or invalid OHLCV
 SAICAPI.NS,insufficient or invalid OHLCV
@@ -318,6 +321,7 @@ SKFINDUS.NS,insufficient or invalid OHLCV
 SKYWAYS.NS,insufficient or invalid OHLCV
 SONA.NS,insufficient or invalid OHLCV
 SONAL.NS,insufficient or invalid OHLCV
+SPELS.NS,insufficient or invalid OHLCV
 SRIKPRIND.NS,insufficient or invalid OHLCV
 SRTL.NS,insufficient or invalid OHLCV
 SSRETAIL.NS,insufficient or invalid OHLCV
@@ -357,7 +361,6 @@ TUTIALKA.NS,insufficient or invalid OHLCV
 UDAYJEW.NS,insufficient or invalid OHLCV
 ULTRAMAR.NS,insufficient or invalid OHLCV
 UPHOT.NS,insufficient or invalid OHLCV
-UTLSOLAR.NS,insufficient or invalid OHLCV
 VADILENT.NS,insufficient or invalid OHLCV
 VAML.NS,insufficient or invalid OHLCV
 VARMORA.NS,insufficient or invalid OHLCV
