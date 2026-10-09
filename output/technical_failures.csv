@@ -15,6 +15,7 @@ AEPL.NS,insufficient or invalid OHLCV
 AEQUS.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
+AGOL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
 ALFREDHE.NS,insufficient or invalid OHLCV
 ALGOQUANT.NS,insufficient or invalid OHLCV
@@ -49,6 +50,7 @@ BAJAJST.NS,insufficient or invalid OHLCV
 BATLIBOI.NS,insufficient or invalid OHLCV
 BCPL.NS,insufficient or invalid OHLCV
 BEEKAY.NS,insufficient or invalid OHLCV
+BELDING.NS,insufficient or invalid OHLCV
 BENARAS.NS,insufficient or invalid OHLCV
 BENGALASM.NS,insufficient or invalid OHLCV
 BHARATCOAL.NS,insufficient or invalid OHLCV
@@ -67,8 +69,8 @@ BRAHMINFRA.NS,insufficient or invalid OHLCV
 BRIGHTBR.NS,insufficient or invalid OHLCV
 BTTL.NS,insufficient or invalid OHLCV
 BUILDPRO.NS,insufficient or invalid OHLCV
+CAPILLARY.NS,insufficient or invalid OHLCV
 CEINSYS.NS,insufficient or invalid OHLCV
-CENTEXT-RE.NS,insufficient or invalid OHLCV
 CFEL.NS,insufficient or invalid OHLCV
 CGVAK.NS,insufficient or invalid OHLCV
 CHEMCRUX.NS,insufficient or invalid OHLCV
@@ -109,6 +111,7 @@ EMPIND.NS,insufficient or invalid OHLCV
 EMPOWER.NS,insufficient or invalid OHLCV
 ENKEIWHEL.NS,insufficient or invalid OHLCV
 ESDS.NS,insufficient or invalid OHLCV
+EXCELSOFT.NS,insufficient or invalid OHLCV
 FEDDERSHOL.NS,insufficient or invalid OHLCV
 FERMENTA.NS,insufficient or invalid OHLCV
 FRACTAL.NS,insufficient or invalid OHLCV
@@ -226,6 +229,7 @@ MSL.NS,insufficient or invalid OHLCV
 MUKESHB.NS,insufficient or invalid OHLCV
 MVELECTRO.NS,insufficient or invalid OHLCV
 MYSORPETRO.NS,insufficient or invalid OHLCV
+NATCO-RE.NS,insufficient or invalid OHLCV
 NATIONSTD.NS,insufficient or invalid OHLCV
 NEAGI.NS,insufficient or invalid OHLCV
 NEPHROPLUS.NS,insufficient or invalid OHLCV
@@ -302,6 +306,7 @@ SHANKESH.NS,insufficient or invalid OHLCV
 SHARDUL.NS,insufficient or invalid OHLCV
 SHBAJRG.NS,insufficient or invalid OHLCV
 SHERVANI.NS,insufficient or invalid OHLCV
+SHILCTECH.NS,insufficient or invalid OHLCV
 SHILGRAVQ.NS,insufficient or invalid OHLCV
 SHINDL.NS,insufficient or invalid OHLCV
 SHIPROCKET.NS,insufficient or invalid OHLCV
