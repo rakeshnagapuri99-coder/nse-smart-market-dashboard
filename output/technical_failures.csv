@@ -9,12 +9,12 @@ ACGL.NS,insufficient or invalid OHLCV
 ACSTECH.NS,insufficient or invalid OHLCV
 ADDIND.NS,insufficient or invalid OHLCV
 ADROITIND.NS,insufficient or invalid OHLCV
-ADSL.NS,insufficient or invalid OHLCV
 ADVAIT.NS,insufficient or invalid OHLCV
 ADVIKCA.NS,insufficient or invalid OHLCV
 AEPL.NS,insufficient or invalid OHLCV
 AEQUS.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
+AGARIND.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
 AGOL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
@@ -116,6 +116,7 @@ FERMENTA.NS,insufficient or invalid OHLCV
 FRACTAL.NS,insufficient or invalid OHLCV
 FREDUN.NS,insufficient or invalid OHLCV
 FRONTSP.NS,insufficient or invalid OHLCV
+FUSIONCX.NS,insufficient or invalid OHLCV
 GAJA.NS,insufficient or invalid OHLCV
 GAUDIUMIVF.NS,insufficient or invalid OHLCV
 GERMAN.NS,insufficient or invalid OHLCV
@@ -254,7 +255,6 @@ PANCHMAHQ.NS,insufficient or invalid OHLCV
 PANORAMA.NS,insufficient or invalid OHLCV
 PARKHOSPS.NS,insufficient or invalid OHLCV
 PARNAXLAB.NS,insufficient or invalid OHLCV
-PAUSHAKLTD.NS,insufficient or invalid OHLCV
 PBMPOLY.NS,insufficient or invalid OHLCV
 PERMAGN.NS,insufficient or invalid OHLCV
 PERNIASPOP.NS,insufficient or invalid OHLCV
@@ -353,7 +353,6 @@ TERAI.NS,insufficient or invalid OHLCV
 TGVSL.NS,insufficient or invalid OHLCV
 THACKER.NS,insufficient or invalid OHLCV
 THAKDEV.NS,insufficient or invalid OHLCV
-TIKONA.NS,insufficient or invalid OHLCV
 TIMEX.NS,insufficient or invalid OHLCV
 TOYAMSL.NS,insufficient or invalid OHLCV
 TRANSCOR.NS,insufficient or invalid OHLCV
