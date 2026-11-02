@@ -3,6 +3,7 @@ Yahoo_Symbol,Reason
 AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
+ABCIND.NS,insufficient or invalid OHLCV
 ABMKNO.NS,insufficient or invalid OHLCV
 ACEVECTOR.NS,insufficient or invalid OHLCV
 ACGL.NS,insufficient or invalid OHLCV
@@ -13,7 +14,6 @@ ADVAIT.NS,insufficient or invalid OHLCV
 ADVIKCA.NS,insufficient or invalid OHLCV
 AEPL.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
-AGASTYAEN.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
 AGOL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
@@ -33,7 +33,6 @@ APOORVA.NS,insufficient or invalid OHLCV
 ARCIL.NS,insufficient or invalid OHLCV
 ARCL.NS,insufficient or invalid OHLCV
 ARDEE.NS,insufficient or invalid OHLCV
-ARHAM.NS,insufficient or invalid OHLCV
 ARIHANT.NS,insufficient or invalid OHLCV
 ARMEE.NS,insufficient or invalid OHLCV
 ARYAMAN.NS,insufficient or invalid OHLCV
@@ -61,6 +60,7 @@ BIRLAPREC.NS,insufficient or invalid OHLCV
 BLACKROSE.NS,insufficient or invalid OHLCV
 BLEL.NS,insufficient or invalid OHLCV
 BLIL.NS,insufficient or invalid OHLCV
+BLSPOLY.NS,insufficient or invalid OHLCV
 BLUECLOUDS.NS,insufficient or invalid OHLCV
 BNAGROCHEM.NS,insufficient or invalid OHLCV
 BNALTD.NS,insufficient or invalid OHLCV
@@ -103,6 +103,7 @@ DSFCL.NS,insufficient or invalid OHLCV
 EASTWEST.NS,insufficient or invalid OHLCV
 EBIX.NS,insufficient or invalid OHLCV
 ECORECO.NS,insufficient or invalid OHLCV
+EDELALTS.NS,insufficient or invalid OHLCV
 EKI.NS,insufficient or invalid OHLCV
 ELANTAS.NS,insufficient or invalid OHLCV
 ELCIDIN.NS,insufficient or invalid OHLCV
@@ -301,6 +302,7 @@ SCANSTL.NS,insufficient or invalid OHLCV
 SEDEMAC.NS,insufficient or invalid OHLCV
 SEIL.NS,insufficient or invalid OHLCV
 SEKURITIND.NS,insufficient or invalid OHLCV
+SFCTECH.NS,insufficient or invalid OHLCV
 SGLRES.NS,insufficient or invalid OHLCV
 SGRL.NS,insufficient or invalid OHLCV
 SHADOWFAX.NS,insufficient or invalid OHLCV
