@@ -1,5 +1,6 @@
 Yahoo_Symbol,Reason
 3BBLACKBIO.NS,insufficient or invalid OHLCV
+3MINDIA.NS,insufficient or invalid OHLCV
 AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
@@ -13,7 +14,6 @@ ADVAIT.NS,insufficient or invalid OHLCV
 ADVIKCA.NS,insufficient or invalid OHLCV
 AEPL.NS,insufficient or invalid OHLCV
 AEROPLANE.NS,insufficient or invalid OHLCV
-AGI.NS,insufficient or invalid OHLCV
 AGL.NS,insufficient or invalid OHLCV
 AGOL.NS,insufficient or invalid OHLCV
 AKCAPIT.NS,insufficient or invalid OHLCV
@@ -113,7 +113,9 @@ ELPROINTL.NS,insufficient or invalid OHLCV
 EMPIND.NS,insufficient or invalid OHLCV
 EMPOWER.NS,insufficient or invalid OHLCV
 ENKEIWHEL.NS,insufficient or invalid OHLCV
+ENNATURE.NS,insufficient or invalid OHLCV
 ESDS.NS,insufficient or invalid OHLCV
+EVONILE.NS,insufficient or invalid OHLCV
 FEDDERSHOL.NS,insufficient or invalid OHLCV
 FERMENTA.NS,insufficient or invalid OHLCV
 FRACTAL.NS,insufficient or invalid OHLCV
@@ -151,6 +153,7 @@ HORIZONIND.NS,insufficient or invalid OHLCV
 HRYNSHP.NS,insufficient or invalid OHLCV
 HTEL.NS,insufficient or invalid OHLCV
 ICICIAMC.NS,insufficient or invalid OHLCV
+IGLSPIRITS.NS,insufficient or invalid OHLCV
 IIRM.NS,insufficient or invalid OHLCV
 INA.NS,insufficient or invalid OHLCV
 INDOKEM.NS,insufficient or invalid OHLCV
@@ -221,9 +224,9 @@ MIIL.NS,insufficient or invalid OHLCV
 MILKYMIST.NS,insufficient or invalid OHLCV
 MINALIND.NS,insufficient or invalid OHLCV
 MKEXIM.NS,insufficient or invalid OHLCV
+MKJEWELS.NS,insufficient or invalid OHLCV
 MLKFOOD.NS,insufficient or invalid OHLCV
 MMWL.NS,insufficient or invalid OHLCV
-MODINATUR.NS,insufficient or invalid OHLCV
 MOHITE.NS,insufficient or invalid OHLCV
 MOLBIO.NS,insufficient or invalid OHLCV
 MOMSBELIEF.NS,insufficient or invalid OHLCV
@@ -243,7 +246,6 @@ NIMBSPROJ.NS,insufficient or invalid OHLCV
 NIRLON.NS,insufficient or invalid OHLCV
 NITTAGELA.NS,insufficient or invalid OHLCV
 NITYAS.NS,insufficient or invalid OHLCV
-NOVARTIND.NS,insufficient or invalid OHLCV
 NTCIND.NS,insufficient or invalid OHLCV
 ODYCORP.NS,insufficient or invalid OHLCV
 OMNI.NS,insufficient or invalid OHLCV
