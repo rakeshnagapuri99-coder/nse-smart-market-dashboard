@@ -1,9 +1,9 @@
 Yahoo_Symbol,Reason
 3BBLACKBIO.NS,insufficient or invalid OHLCV
-3MINDIA.NS,insufficient or invalid OHLCV
 AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
+ABCIND.NS,insufficient or invalid OHLCV
 ABMKNO.NS,insufficient or invalid OHLCV
 ACEVECTOR.NS,insufficient or invalid OHLCV
 ACGL.NS,insufficient or invalid OHLCV
@@ -49,6 +49,7 @@ AZADIND.NS,insufficient or invalid OHLCV
 BAJAJST.NS,insufficient or invalid OHLCV
 BATLIBOI.NS,insufficient or invalid OHLCV
 BCPL.NS,insufficient or invalid OHLCV
+BCSSL.NS,insufficient or invalid OHLCV
 BEEKAY.NS,insufficient or invalid OHLCV
 BELDING.NS,insufficient or invalid OHLCV
 BENARAS.NS,insufficient or invalid OHLCV
@@ -70,6 +71,7 @@ BONLON.NS,insufficient or invalid OHLCV
 BPLPHARMA.NS,insufficient or invalid OHLCV
 BRAHMINFRA.NS,insufficient or invalid OHLCV
 BRIGHTBR.NS,insufficient or invalid OHLCV
+BRIGHTOUTD.NS,insufficient or invalid OHLCV
 BTTL.NS,insufficient or invalid OHLCV
 BUILDPRO.NS,insufficient or invalid OHLCV
 CEINSYS.NS,insufficient or invalid OHLCV
@@ -84,7 +86,6 @@ COCKERILL.NS,insufficient or invalid OHLCV
 COMFINTE.NS,insufficient or invalid OHLCV
 COMPEAU.NS,insufficient or invalid OHLCV
 CORDELIA.NS,insufficient or invalid OHLCV
-CORONA.NS,insufficient or invalid OHLCV
 CPL.NS,insufficient or invalid OHLCV
 CRAVATEX.NS,insufficient or invalid OHLCV
 CRSL.NS,insufficient or invalid OHLCV
