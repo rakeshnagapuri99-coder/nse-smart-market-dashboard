@@ -1,9 +1,9 @@
 Yahoo_Symbol,Reason
 3BBLACKBIO.NS,insufficient or invalid OHLCV
+3MINDIA.NS,insufficient or invalid OHLCV
 AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
-ABCIND.NS,insufficient or invalid OHLCV
 ABMKNO.NS,insufficient or invalid OHLCV
 ACEVECTOR.NS,insufficient or invalid OHLCV
 ACGL.NS,insufficient or invalid OHLCV
@@ -395,7 +395,6 @@ VOEPL.NS,insufficient or invalid OHLCV
 VOGL.NS,insufficient or invalid OHLCV
 VOITHPAPR.NS,insufficient or invalid OHLCV
 VTMLTD.NS,insufficient or invalid OHLCV
-WAKEFIT.NS,insufficient or invalid OHLCV
 WARDINMOBI.NS,insufficient or invalid OHLCV
 WATERBASE.NS,insufficient or invalid OHLCV
 WELSPLSOL.NS,insufficient or invalid OHLCV
