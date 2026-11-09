@@ -1,6 +1,5 @@
 Yahoo_Symbol,Reason
 3BBLACKBIO.NS,insufficient or invalid OHLCV
-3MINDIA.NS,insufficient or invalid OHLCV
 AARNAV.NS,insufficient or invalid OHLCV
 AASTHA.NS,insufficient or invalid OHLCV
 ABANSENT.NS,insufficient or invalid OHLCV
@@ -240,7 +239,6 @@ MVELECTRO.NS,insufficient or invalid OHLCV
 MYSORPETRO.NS,insufficient or invalid OHLCV
 NATIONSTD.NS,insufficient or invalid OHLCV
 NEAGI.NS,insufficient or invalid OHLCV
-NEPHROPLUS.NS,insufficient or invalid OHLCV
 NICCOPAR.NS,insufficient or invalid OHLCV
 NILE.NS,insufficient or invalid OHLCV
 NIMBSPROJ.NS,insufficient or invalid OHLCV
@@ -260,7 +258,6 @@ PACIFICI.NS,insufficient or invalid OHLCV
 PANCHMAHQ.NS,insufficient or invalid OHLCV
 PANORAMA.NS,insufficient or invalid OHLCV
 PARASHLTH.NS,insufficient or invalid OHLCV
-PARKHOSPS.NS,insufficient or invalid OHLCV
 PARNAXLAB.NS,insufficient or invalid OHLCV
 PBMPOLY.NS,insufficient or invalid OHLCV
 PERMAGN.NS,insufficient or invalid OHLCV
@@ -333,6 +330,7 @@ SKYWAYS.NS,insufficient or invalid OHLCV
 SMT.NS,insufficient or invalid OHLCV
 SONA.NS,insufficient or invalid OHLCV
 SONAL.NS,insufficient or invalid OHLCV
+SPELS.NS,insufficient or invalid OHLCV
 SRIKPRIND.NS,insufficient or invalid OHLCV
 SRIT.NS,insufficient or invalid OHLCV
 SRTL.NS,insufficient or invalid OHLCV
@@ -381,6 +379,7 @@ VARMORA.NS,insufficient or invalid OHLCV
 VASUPRADA.NS,insufficient or invalid OHLCV
 VEDAVAAG.NS,insufficient or invalid OHLCV
 VEDPOWER.NS,insufficient or invalid OHLCV
+VEEFIN.NS,insufficient or invalid OHLCV
 VEEGALAND.NS,insufficient or invalid OHLCV
 VELJAN.NS,insufficient or invalid OHLCV
 VGCL.NS,insufficient or invalid OHLCV
